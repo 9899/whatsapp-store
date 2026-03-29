@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import "./App.css";
 
 const WA_NUMBER = "919899563148";
@@ -435,6 +436,7 @@ export default function App() {
           </div>
         )}
       </main>
+      <Analytics />
     </div>
   );
 }
