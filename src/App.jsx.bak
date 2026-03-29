@@ -1,9 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { db } from "./firebase";
-import { collection, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore";
 import "./App.css";
 
-const CATEGORIES_DEFAULT = ["All","Clothing","Footwear","Electronics","Accessories","Bags"];
+const WA_NUMBER = "919899563148";
+
+const PRODUCTS = [
+  { id:1, name:"Classic T-Shirt",    price:499,  orig:699,  emoji:"👕", tag:"Sale",        cat:"Clothing",    stock:12, rating:4.3, reviews:128 },
+  { id:2, name:"Premium Sneakers",   price:1999, orig:null, emoji:"👟", tag:"New Arrival",  cat:"Footwear",    stock:3,  rating:4.7, reviews:64  },
+  { id:3, name:"Smart Watch",        price:2999, orig:3499, emoji:"⌚", tag:"Sale",        cat:"Electronics", stock:7,  rating:4.5, reviews:210 },
+  { id:4, name:"Sunglasses",         price:899,  orig:null, emoji:"🕶️", tag:"Trending",    cat:"Accessories", stock:2,  rating:4.1, reviews:45  },
+  { id:5, name:"Leather Wallet",     price:699,  orig:null, emoji:"👝", tag:"Popular",     cat:"Accessories", stock:15, rating:4.6, reviews:89  },
+  { id:6, name:"Canvas Backpack",    price:1499, orig:1999, emoji:"🎒", tag:"Sale",        cat:"Bags",        stock:1,  rating:4.4, reviews:156 },
+  { id:7, name:"Denim Jacket",       price:2199, orig:null, emoji:"🧥", tag:"New Arrival",  cat:"Clothing",    stock:5,  rating:4.2, reviews:33  },
+  { id:8, name:"Running Shorts",     price:599,  orig:799,  emoji:"🩳", tag:"Sale",        cat:"Clothing",    stock:20, rating:4.0, reviews:72  },
+];
+
+const CATEGORIES = ["All","Clothing","Footwear","Electronics","Accessories","Bags"];
+const PROMOS = { SAVE10:10, FLAT200:null, WELCOME:15 };
 
 function useAnimNum(target) {
   const [v, setV] = useState(target);
@@ -73,9 +85,6 @@ function Skeleton() {
 
 export default function App() {
   const [dark, setDark]               = useState(false);
-  const [products, setProducts]       = useState([]);
-  const [coupons, setCoupons]         = useState([]);
-  const [settings, setSettings]       = useState({ storeName: "Order Store", whatsapp: "919899563148", deliveryFee: "49", freeDeliveryAbove: "999" });
   const [loaded, setLoaded]           = useState(false);
   const [tab, setTab]                 = useState(0);
   const [cart, setCart]               = useState([]);
@@ -94,33 +103,12 @@ export default function App() {
   const [cartShake, setCartShake]     = useState(false);
   const tid = useRef(0);
 
-  // Load from Firebase
-  useEffect(() => {
-    const u1 = onSnapshot(collection(db, "products"), s => {
-      setProducts(s.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoaded(true);
-    });
-    const u2 = onSnapshot(collection(db, "coupons"), s => {
-      setCoupons(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.active));
-    });
-    getDoc(doc(db, "settings", "store")).then(d => { if (d.exists()) setSettings(d.data()); });
-    return () => { u1(); u2(); };
-  }, []);
-
+  useEffect(() => { setTimeout(() => setLoaded(true), 1500); }, []);
   useEffect(() => { document.documentElement.setAttribute("data-theme", dark ? "dark" : "light"); }, [dark]);
 
-  const freeAbove   = Number(settings.freeDeliveryAbove) || 999;
-  const deliveryFee = Number(settings.deliveryFee) || 49;
-  const waNumber    = settings.whatsapp || "919899563148";
-
   const subtotal  = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const discount  = appliedPromo
-    ? (appliedPromo.type === "percent"
-        ? Math.round(subtotal * appliedPromo.value / 100)
-        : appliedPromo.value)
-    : 0;
-  const delivery  = subtotal >= freeAbove ? 0 : deliveryFee;
-  const total     = Math.max(0, subtotal - discount + delivery);
+  const discount  = appliedPromo ? (PROMOS[appliedPromo] !== null ? Math.round(subtotal * PROMOS[appliedPromo] / 100) : 200) : 0;
+  const total     = Math.max(0, subtotal - discount);
   const itemCount = cart.reduce((s, i) => s + i.qty, 0);
   const animTotal = useAnimNum(total);
 
@@ -158,53 +146,38 @@ export default function App() {
 
   const applyPromo = () => {
     const code = promoInput.trim().toUpperCase();
-    const found = coupons.find(c => c.code === code);
-    if (found) {
-      if (found.minOrder && subtotal < found.minOrder) {
-        setPromoMsg({ ok: false, text: `Min order Rs.${found.minOrder} required` }); return;
-      }
-      setAppliedPromo(found);
+    if (Object.prototype.hasOwnProperty.call(PROMOS, code)) {
+      setAppliedPromo(code);
       setPromoMsg({ ok: true, text: `✓ ${code} applied!` });
       toast("Promo applied!", "success");
     } else {
       setAppliedPromo(null);
-      setPromoMsg({ ok: false, text: "Invalid coupon code" });
+      setPromoMsg({ ok: false, text: "Invalid. Try SAVE10, FLAT200 or WELCOME" });
     }
   };
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())             e.name    = "Name is required";
-    if (!/^\d{10}$/.test(form.phone))  e.phone   = "Enter valid 10-digit number";
-    if (!form.address.trim())          e.address = "Address is required";
+    if (!form.name.trim())            e.name    = "Name is required";
+    if (!/^\d{10}$/.test(form.phone)) e.phone   = "Enter valid 10-digit number";
+    if (!form.address.trim())         e.address = "Address is required";
     setErrors(e);
     return !Object.keys(e).length;
   };
 
-  const placeOrder = async () => {
-    if (!validate() || !cart.length) return;
-    // Save order to Firestore
-    const orderData = {
-      customerName: form.name, phone: form.phone, address: form.address,
-      items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, qty: i.qty })),
-      subtotal, discount, delivery, total,
-      coupon: appliedPromo?.code || null,
-      status: "pending",
-      createdAt: serverTimestamp(),
-    };
-    await addDoc(collection(db, "orders"), orderData);
-
-    // Build WhatsApp message
+  const buildWhatsAppUrl = () => {
     const sep = "─────────────────────";
-    const itemLines = cart.map(i => `  • ${i.emoji} ${i.name} x${i.qty}  =  Rs.${(i.price * i.qty).toLocaleString()}`).join("\n");
+    const itemLines = cart.map(i =>
+      `  • ${i.emoji} ${i.name} x${i.qty}  =  Rs.${(i.price * i.qty).toLocaleString()}`
+    ).join("\n");
     const msg = [
       "🛒 *NEW ORDER*",
       sep,
       "*Items Ordered:*",
       itemLines,
       `💰 *Total: Rs.${total.toLocaleString()}*`,
-      appliedPromo ? `🏷️ Promo (${appliedPromo.code}): -Rs.${discount.toLocaleString()}` : null,
-      `🚚 Delivery: ${delivery === 0 ? "FREE" : `Rs.${delivery}`}`,
+      appliedPromo ? `🏷️ Promo (${appliedPromo}): -Rs.${discount.toLocaleString()}` : null,
+      `🚚 Delivery: ${subtotal >= 999 ? "FREE" : "Rs.49"}`,
       sep,
       "👤 *Customer Details:*",
       `  Name: ${form.name}`,
@@ -213,8 +186,12 @@ export default function App() {
       sep,
       "_Sent via WhatsApp Order App_",
     ].filter(Boolean).join("\n");
+    return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
+  };
 
-    setWaUrl(`https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`);
+  const placeOrder = () => {
+    if (!validate() || !cart.length) return;
+    setWaUrl(buildWhatsAppUrl());
     setSent(true);
     setConfetti(true);
     setTimeout(() => setConfetti(false), 200);
@@ -226,10 +203,9 @@ export default function App() {
     setSent(false); setWaUrl(""); setTab(0);
   };
 
-  const categories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))];
-  const filtered = products.filter(p =>
-    (cat === "All" || p.category === cat) &&
-    p.name?.toLowerCase().includes(search.toLowerCase())
+  const filtered = PRODUCTS.filter(p =>
+    (cat === "All" || p.cat === cat) &&
+    p.name.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -237,10 +213,11 @@ export default function App() {
       <Toast toasts={toasts} />
       <Confetti run={confetti} />
 
+      {/* HEADER */}
       <header className="header">
         <div className="header-inner">
           <div>
-            <h1 className="logo">{settings.storeName || "Order Store"}</h1>
+            <h1 className="logo">Order Store</h1>
             <p className="tagline">Fast delivery via WhatsApp</p>
           </div>
           <div className="header-actions">
@@ -261,59 +238,63 @@ export default function App() {
 
       <main className="main">
 
+        {/* ── SHOP ── */}
         {tab === 0 && (
           <div className="fade-in">
             <div className="search-wrap">
               <span className="search-icon">🔍</span>
-              <input className="search-input" placeholder="Search products…" value={search} onChange={e => setSearch(e.target.value)} />
+              <input className="search-input" placeholder="Search products…"
+                value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+
             <div className="cat-bar">
-              {categories.map(c => (
+              {CATEGORIES.map(c => (
                 <button key={c} className={`cat-btn${cat === c ? " active" : ""}`} onClick={() => setCat(c)}>{c}</button>
               ))}
             </div>
-            {subtotal > 0 && subtotal < freeAbove && (
+
+            {subtotal > 0 && subtotal < 999 && (
               <div className="delivery-banner">
                 <div className="delivery-text">
-                  <span>Add Rs.{(freeAbove - subtotal).toLocaleString()} more for free delivery</span>
+                  <span>Add Rs.{(999 - subtotal).toLocaleString()} more for free delivery</span>
                   <span className="free-label">FREE</span>
                 </div>
                 <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, (subtotal / freeAbove) * 100)}%` }} />
+                  <div className="progress-fill" style={{ width: `${Math.min(100, (subtotal / 999) * 100)}%` }} />
                 </div>
               </div>
             )}
-            {subtotal >= freeAbove && subtotal > 0 && <div className="free-banner">🎉 Free delivery unlocked!</div>}
+            {subtotal >= 999 && subtotal > 0 && (
+              <div className="free-banner">🎉 Free delivery unlocked!</div>
+            )}
 
             <div className="product-grid">
               {!loaded
-                ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} />)
+                ? Array.from({ length: 8 }, (_, i) => <Skeleton key={i} />)
                 : filtered.length === 0
                   ? <div className="empty-state"><div>🔍</div><p>No products found</p></div>
                   : filtered.map(p => {
                       const inCart = cart.find(i => i.id === p.id);
                       const wished = wishlist.includes(p.id);
-                      const disc   = p.originalPrice ? Math.round((1 - p.price / p.originalPrice) * 100) : null;
+                      const disc   = p.orig ? Math.round((1 - p.price / p.orig) * 100) : null;
                       return (
                         <div key={p.id} className="card product-card">
                           {disc && <span className="disc-badge">-{disc}%</span>}
                           <button className="wish-btn" onClick={() => toggleWish(p)}>{wished ? "❤️" : "🤍"}</button>
-                          <div className="product-img">
-                            {p.image
-                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                              : <span style={{ fontSize: 50 }}>{p.emoji || "🛍️"}</span>}
-                          </div>
+                          <div className="product-img">{p.emoji}</div>
                           <div className="product-body">
                             <p className="product-name">{p.name}</p>
-                            <div className="price-row">
-                              <span className="price">Rs.{p.price?.toLocaleString()}</span>
-                              {p.originalPrice && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
+                            <div className="stars">
+                              {"★".repeat(Math.floor(p.rating))}{"☆".repeat(5 - Math.floor(p.rating))}
+                              <span className="reviews"> {p.rating} ({p.reviews})</span>
                             </div>
-                            {p.stock <= 3 && p.stock > 0 && <p className="low-stock">Only {p.stock} left!</p>}
-                            {p.stock === 0 && <p className="low-stock">Out of stock</p>}
-                            <button className={`add-btn${inCart ? " in-cart" : ""}${p.stock === 0 ? " disabled" : ""}`}
-                              onClick={() => p.stock > 0 && addToCart(p)} disabled={p.stock === 0}>
-                              {p.stock === 0 ? "Out of Stock" : inCart ? `✓ In Cart (${inCart.qty})` : "+ Add to Cart"}
+                            <div className="price-row">
+                              <span className="price">Rs.{p.price.toLocaleString()}</span>
+                              {p.orig && <span className="orig-price">Rs.{p.orig.toLocaleString()}</span>}
+                            </div>
+                            {p.stock <= 3 && <p className="low-stock">Only {p.stock} left!</p>}
+                            <button className={`add-btn${inCart ? " in-cart" : ""}`} onClick={() => addToCart(p)}>
+                              {inCart ? `✓ In Cart (${inCart.qty})` : "+ Add to Cart"}
                             </button>
                           </div>
                         </div>
@@ -321,6 +302,7 @@ export default function App() {
                     })
               }
             </div>
+
             {itemCount > 0 && (
               <div className="floater">
                 <span>{itemCount} items · Rs.{animTotal.toLocaleString()}</span>
@@ -330,6 +312,7 @@ export default function App() {
           </div>
         )}
 
+        {/* ── CART ── */}
         {tab === 1 && (
           <div className="fade-in">
             <h2 className="section-title">Your Cart</h2>
@@ -343,14 +326,10 @@ export default function App() {
               <>
                 {cart.map(item => (
                   <div key={item.id} className="cart-item">
-                    <div className="cart-emoji">
-                      {item.image
-                        ? <img src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10 }} />
-                        : item.emoji}
-                    </div>
+                    <div className="cart-emoji">{item.emoji}</div>
                     <div className="cart-info">
                       <p className="cart-name">{item.name}</p>
-                      <p className="cart-price">Rs.{item.price?.toLocaleString()} each</p>
+                      <p className="cart-price">Rs.{item.price.toLocaleString()} each</p>
                     </div>
                     <div className="qty-ctrl">
                       <button className="qty-btn" onClick={() => changeQty(item.id, -1)}>−</button>
@@ -363,15 +342,18 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+
                 <div className="promo-row">
-                  <input className="promo-input" placeholder="Enter coupon code…" value={promoInput} onChange={e => setPromoInput(e.target.value.toUpperCase())} />
+                  <input className="promo-input" placeholder="Promo: SAVE10, FLAT200, WELCOME"
+                    value={promoInput} onChange={e => setPromoInput(e.target.value.toUpperCase())} />
                   <button className="btn-dark sm" onClick={applyPromo}>Apply</button>
                 </div>
                 {promoMsg && <p className={`promo-msg${promoMsg.ok ? " ok" : ""}`}>{promoMsg.text}</p>}
+
                 <div className="surface summary">
                   <div className="sum-row"><span>Subtotal ({itemCount} items)</span><span>Rs.{subtotal.toLocaleString()}</span></div>
-                  {appliedPromo && <div className="sum-row green"><span>Discount ({appliedPromo.code})</span><span>-Rs.{discount.toLocaleString()}</span></div>}
-                  <div className="sum-row green"><span>Delivery</span><span>{delivery === 0 ? "FREE 🎉" : `Rs.${delivery}`}</span></div>
+                  {appliedPromo && <div className="sum-row green"><span>Discount ({appliedPromo})</span><span>-Rs.{discount.toLocaleString()}</span></div>}
+                  <div className="sum-row green"><span>Delivery</span><span>{subtotal >= 999 ? "FREE" : "Rs.49"}</span></div>
                   <div className="sum-row total"><span>Total</span><span>Rs.{animTotal.toLocaleString()}</span></div>
                 </div>
                 <button className="btn-dark full" onClick={() => setTab(2)}>Proceed to Checkout →</button>
@@ -380,15 +362,19 @@ export default function App() {
           </div>
         )}
 
+        {/* ── CHECKOUT ── */}
         {tab === 2 && (
           <div className="fade-in">
             {sent ? (
               <div className="success-screen">
                 <div className="success-check">✓</div>
-                <h2>Order Placed!</h2>
-                <p>Tap below to open WhatsApp and confirm your order.</p>
+                <h2>Order Ready!</h2>
+                <p>Tap below to open WhatsApp and send your order.</p>
                 <a className="wa-link" href={waUrl} target="_blank" rel="noreferrer">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.975-1.302A9.956 9.956 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.945 7.945 0 01-4.27-1.24l-.306-.183-3.046.798.813-2.968-.2-.314A7.945 7.945 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/>
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.975-1.302A9.956 9.956 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.945 7.945 0 01-4.27-1.24l-.306-.183-3.046.798.813-2.968-.2-.314A7.945 7.945 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/>
+                  </svg>
                   Open WhatsApp &amp; Send Order
                 </a>
                 <button className="btn-dark" onClick={resetApp}>Shop Again</button>
@@ -397,8 +383,8 @@ export default function App() {
               <>
                 <h2 className="section-title">Customer Details</h2>
                 {[
-                  { label: "Full Name", key: "name", type: "text", ph: "e.g. Rahul Sharma" },
-                  { label: "Phone Number", key: "phone", type: "tel", ph: "10-digit mobile" },
+                  { label: "Full Name",    key: "name",  type: "text", ph: "e.g. Rahul Sharma" },
+                  { label: "Phone Number", key: "phone", type: "tel",  ph: "10-digit mobile" },
                 ].map(({ label, key, type, ph }) => (
                   <div key={key} className="field">
                     <label>{label}</label>
@@ -416,6 +402,7 @@ export default function App() {
                     onChange={e => { setForm({ ...form, address: e.target.value }); setErrors({ ...errors, address: "" }); }} />
                   {errors.address && <span className="field-err">{errors.address}</span>}
                 </div>
+
                 {cart.length > 0 && (
                   <div className="surface summary" style={{ marginBottom: 20 }}>
                     <p className="sum-heading">Order Summary</p>
@@ -425,16 +412,21 @@ export default function App() {
                         <span>Rs.{(i.price * i.qty).toLocaleString()}</span>
                       </div>
                     ))}
-                    {appliedPromo && <div className="sum-row green sm"><span>Discount</span><span>-Rs.{discount.toLocaleString()}</span></div>}
-                    <div className="sum-row green sm"><span>Delivery</span><span>{delivery === 0 ? "FREE" : `Rs.${delivery}`}</span></div>
+                    {appliedPromo && <div className="sum-row green sm"><span>Discount ({appliedPromo})</span><span>-Rs.{discount.toLocaleString()}</span></div>}
                     <div className="sum-row total"><span>Total</span><span>Rs.{total.toLocaleString()}</span></div>
                   </div>
                 )}
+
                 {cart.length === 0 && (
                   <div className="warn-box">Cart is empty. <button className="link-btn" onClick={() => setTab(0)}>Add items</button></div>
                 )}
-                <button className={`wa-place-btn${!cart.length ? " disabled" : ""}`} onClick={placeOrder} disabled={!cart.length}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.975-1.302A9.956 9.956 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.945 7.945 0 01-4.27-1.24l-.306-.183-3.046.798.813-2.968-.2-.314A7.945 7.945 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/></svg>
+
+                <button className={`wa-place-btn${!cart.length ? " disabled" : ""}`}
+                  onClick={placeOrder} disabled={!cart.length}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/>
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.975-1.302A9.956 9.956 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.945 7.945 0 01-4.27-1.24l-.306-.183-3.046.798.813-2.968-.2-.314A7.945 7.945 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/>
+                  </svg>
                   Place Order on WhatsApp
                 </button>
                 <p className="wa-hint">You'll be redirected to WhatsApp to confirm</p>
