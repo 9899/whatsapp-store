@@ -287,7 +287,7 @@ export default function App() {
                           <button className="wish-btn" onClick={() => toggleWish(p)}>{wished ? "❤️" : "🤍"}</button>
                           <div className="product-img">
                             {p.image
-                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "contain", background: "var(--surface)" }} />
                               : <span style={{ fontSize: 50 }}>{p.emoji || "🛍️"}</span>}
                           </div>
                           <div className="product-body">
