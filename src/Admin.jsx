@@ -1,39 +1,42 @@
 import { useState, useEffect } from "react";
 import { auth, db, googleProvider } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import {
-  collection, addDoc, updateDoc, deleteDoc,
-  doc, onSnapshot, serverTimestamp, setDoc, getDoc
-} from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, getDoc } from "firebase/firestore";
 import { uploadImage } from "./cloudinary";
 import "./Admin.css";
 
 const TABS = ["Products", "Coupons", "Orders", "Settings"];
+const DEFAULT_CATS = ["Clothing", "Footwear", "Electronics", "Accessories", "Bags"];
 
 export default function Admin() {
-  const [user, setUser]         = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [tab, setTab]           = useState(0);
-  const [products, setProducts] = useState([]);
-  const [coupons, setCoupons]   = useState([]);
-  const [orders, setOrders]     = useState([]);
-  const [settings, setSettings] = useState({ storeName: "", whatsapp: "", deliveryFee: "49", freeDeliveryAbove: "999" });
-  const [toast, setToast]       = useState(null);
-  const [modal, setModal]       = useState(null); // {type: 'product'|'coupon', data}
+  const [user, setUser]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [tab, setTab]               = useState(0);
+  const [products, setProducts]     = useState([]);
+  const [coupons, setCoupons]       = useState([]);
+  const [orders, setOrders]         = useState([]);
+  const [settings, setSettings]     = useState({ storeName: "", whatsapp: "", deliveryFee: "49", freeDeliveryAbove: "999" });
+  const [categories, setCategories] = useState([...DEFAULT_CATS]);
+  const [newCatInput, setNewCatInput] = useState("");
+  const [toast, setToast]           = useState(null);
+  const [modal, setModal]           = useState(null);
 
-  // Auth
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setLoading(false); });
     return unsub;
   }, []);
 
-  // Firestore listeners
   useEffect(() => {
     if (!user) return;
     const u1 = onSnapshot(collection(db, "products"), s => setProducts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const u2 = onSnapshot(collection(db, "coupons"),  s => setCoupons(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const u3 = onSnapshot(collection(db, "orders"),   s => setOrders(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt?.seconds - a.createdAt?.seconds)));
-    const u4 = getDoc(doc(db, "settings", "store")).then(d => { if (d.exists()) setSettings(d.data()); });
+    const u3 = onSnapshot(collection(db, "orders"),   s => setOrders(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds)));
+    getDoc(doc(db, "settings", "store")).then(d => {
+      if (d.exists()) {
+        setSettings(d.data());
+        if (d.data().categories) setCategories(d.data().categories);
+      }
+    });
     return () => { u1(); u2(); u3(); };
   }, [user]);
 
@@ -49,14 +52,29 @@ export default function Admin() {
 
   const logout = () => signOut(auth);
 
-  // Settings save
   const saveSettings = async () => {
-    await setDoc(doc(db, "settings", "store"), settings);
+    await setDoc(doc(db, "settings", "store"), { ...settings, categories });
     showToast("Settings saved!");
   };
 
-  // ── LOGIN SCREEN ──
-  if (loading) return <div className="admin-center"><div className="spinner"/></div>;
+  const addCategory = () => {
+    const val = newCatInput.trim();
+    if (!val) return;
+    if (categories.map(c => c.toLowerCase()).includes(val.toLowerCase())) {
+      showToast("Category already exists", false); return;
+    }
+    setCategories(prev => [...prev, val]);
+    setNewCatInput("");
+    showToast(`"${val}" added!`);
+  };
+
+  const deleteCategory = (cat) => {
+    if (DEFAULT_CATS.includes(cat)) { showToast("Cannot delete default category", false); return; }
+    setCategories(prev => prev.filter(c => c !== cat));
+    showToast(`"${cat}" removed`);
+  };
+
+  if (loading) return <div className="admin-center"><div className="spinner" /></div>;
 
   if (!user) return (
     <div className="admin-center">
@@ -65,26 +83,29 @@ export default function Admin() {
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Order Store CRM</h1>
         <p style={{ color: "#888", marginBottom: 28, fontSize: 14 }}>Sign in to manage your store</p>
         <button className="google-btn" onClick={login}>
-          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 48 48">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
           Continue with Google
         </button>
       </div>
     </div>
   );
 
-  // ── MAIN CRM ──
   return (
     <div className="admin-wrap">
       {toast && <div className={`admin-toast${toast.ok ? "" : " err"}`}>{toast.msg}</div>}
-      {modal && <Modal modal={modal} setModal={setModal} showToast={showToast} />}
+      {modal && <Modal modal={modal} setModal={setModal} showToast={showToast} categories={categories} />}
 
-      {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">🛒 CRM</div>
         <nav>
           {TABS.map((t, i) => (
             <button key={t} className={`side-item${tab === i ? " active" : ""}`} onClick={() => setTab(i)}>
-              {["📦","🏷️","📋","⚙️"][i]} {t}
+              {["📦", "🏷️", "📋", "⚙️"][i]} {t}
             </button>
           ))}
         </nav>
@@ -97,7 +118,6 @@ export default function Admin() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="admin-main">
 
         {/* ── PRODUCTS ── */}
@@ -113,7 +133,12 @@ export default function Admin() {
                 <tbody>
                   {products.map(p => (
                     <tr key={p.id}>
-                      <td><img src={p.image || "https://via.placeholder.com/48"} alt="" className="table-img" /></td>
+                      <td>
+                        {p.image
+                          ? <img src={p.image} alt="" className="table-img" />
+                          : <div className="table-img" style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, background: "#f5f5f5" }}>{p.emoji}</div>
+                        }
+                      </td>
                       <td><strong>{p.name}</strong></td>
                       <td>Rs.{p.price?.toLocaleString()}</td>
                       <td>{p.originalPrice ? `Rs.${p.originalPrice?.toLocaleString()}` : "—"}</td>
@@ -170,7 +195,7 @@ export default function Admin() {
             <div className="page-header">
               <h2>Orders <span className="count">{orders.length}</span></h2>
             </div>
-            {orders.length === 0 && <div className="empty-msg">No orders yet. Orders appear here when customers place them.</div>}
+            {orders.length === 0 && <div className="empty-msg">No orders yet.</div>}
             {orders.map(o => (
               <div key={o.id} className="order-card">
                 <div className="order-header">
@@ -210,9 +235,9 @@ export default function Admin() {
             <div className="page-header"><h2>Store Settings</h2></div>
             <div className="settings-card">
               {[
-                { label: "Store Name",           key: "storeName",         ph: "e.g. My Fashion Store" },
-                { label: "WhatsApp Number",       key: "whatsapp",          ph: "e.g. 919899563148" },
-                { label: "Delivery Fee (Rs.)",    key: "deliveryFee",       ph: "e.g. 49" },
+                { label: "Store Name",               key: "storeName",         ph: "e.g. My Fashion Store" },
+                { label: "WhatsApp Number",           key: "whatsapp",          ph: "e.g. 919899563148" },
+                { label: "Delivery Fee (Rs.)",        key: "deliveryFee",       ph: "e.g. 49" },
                 { label: "Free Delivery Above (Rs.)", key: "freeDeliveryAbove", ph: "e.g. 999" },
               ].map(({ label, key, ph }) => (
                 <div key={key} className="field">
@@ -223,6 +248,48 @@ export default function Admin() {
               ))}
               <button className="btn-primary" onClick={saveSettings}>💾 Save Settings</button>
             </div>
+
+            {/* ── CATEGORY MANAGER ── */}
+            <div className="page-header" style={{ marginTop: 32 }}>
+              <h2>Categories <span className="count">{categories.length}</span></h2>
+            </div>
+            <div className="settings-card">
+              <p style={{ fontSize: 13, color: "#888", marginBottom: 14 }}>
+                These categories appear in the product form and store filters.
+              </p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <input
+                  placeholder="e.g. Jewellery, Sports, Home Decor..."
+                  value={newCatInput}
+                  onChange={e => setNewCatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addCategory()}
+                  style={{ flex: 1, padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", outline: "none" }}
+                />
+                <button className="btn-primary" onClick={addCategory}>+ Add</button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {categories.map(cat => (
+                  <div key={cat} style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    background: DEFAULT_CATS.includes(cat) ? "#f0f0f0" : "#e8f4fd",
+                    color: DEFAULT_CATS.includes(cat) ? "#555" : "#1a6fa8",
+                    padding: "6px 12px", borderRadius: 20, fontSize: 13, fontWeight: 600,
+                  }}>
+                    {cat}
+                    {DEFAULT_CATS.includes(cat)
+                      ? <span style={{ fontSize: 11, color: "#aaa", marginLeft: 2 }}>default</span>
+                      : <button onClick={() => deleteCategory(cat)} style={{
+                          background: "none", border: "none", cursor: "pointer",
+                          color: "#e03030", fontWeight: 700, fontSize: 14, lineHeight: 1, padding: 0, marginLeft: 2
+                        }}>×</button>
+                    }
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize: 12, color: "#aaa", marginTop: 12 }}>
+                Click "Save Settings" above to persist category changes.
+              </p>
+            </div>
           </div>
         )}
 
@@ -232,18 +299,26 @@ export default function Admin() {
 }
 
 /* ── MODAL ── */
-function Modal({ modal, setModal, showToast }) {
+function Modal({ modal, setModal, showToast, categories }) {
   const isProduct = modal.type === "product";
   const editing   = !!modal.data;
+  const allCats   = categories?.length ? categories : DEFAULT_CATS;
 
   const [form, setForm] = useState(modal.data || (isProduct ? {
-    name: "", price: "", originalPrice: "", stock: "", category: "Clothing",
+    name: "", price: "", originalPrice: "", stock: "", category: allCats[0] || "Clothing",
     tag: "New Arrival", emoji: "🛍️", image: "", imageUrl: "",
   } : {
     code: "", type: "percent", value: "", minOrder: "", active: true,
   }));
+
   const [uploading, setUploading] = useState(false);
   const [imgPreview, setImgPreview] = useState(modal.data?.image || "");
+  const [customCat, setCustomCat] = useState(
+    modal.data?.category ? !allCats.includes(modal.data.category) : false
+  );
+  const [newCat, setNewCat] = useState(
+    modal.data?.category && !allCats.includes(modal.data.category) ? modal.data.category : ""
+  );
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -268,12 +343,13 @@ function Modal({ modal, setModal, showToast }) {
   const save = async () => {
     if (isProduct) {
       if (!form.name || !form.price) { showToast("Name and price required", false); return; }
+      const finalCat = customCat ? newCat.trim() : form.category;
+      if (!finalCat) { showToast("Please enter a category", false); return; }
       const data = {
         name: form.name, price: Number(form.price),
         originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
-        stock: Number(form.stock) || 0, category: form.category,
-        tag: form.tag, emoji: form.emoji,
-        image: form.image || "",
+        stock: Number(form.stock) || 0, category: finalCat,
+        tag: form.tag, emoji: form.emoji, image: form.image || "",
       };
       if (editing) await updateDoc(doc(db, "products", form.id), data);
       else await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
@@ -302,7 +378,6 @@ function Modal({ modal, setModal, showToast }) {
 
         {isProduct ? (
           <div className="modal-body">
-            {/* Image */}
             <div className="field">
               <label>Product Image</label>
               <div className="img-upload-row">
@@ -316,7 +391,7 @@ function Modal({ modal, setModal, showToast }) {
               {uploading && <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>⏳ Uploading...</p>}
             </div>
             <div className="field-row">
-              <div className="field">
+              <div className="field" style={{ flex: 1 }}>
                 <label>Emoji</label>
                 <input value={form.emoji} onChange={e => set("emoji", e.target.value)} style={{ fontSize: 22 }} />
               </div>
@@ -342,14 +417,23 @@ function Modal({ modal, setModal, showToast }) {
             <div className="field-row">
               <div className="field">
                 <label>Category</label>
-                <select value={form.category} onChange={e => set("category", e.target.value)}>
-                  {["Clothing","Footwear","Electronics","Accessories","Bags"].map(c => <option key={c}>{c}</option>)}
+                <select value={customCat ? "__custom__" : form.category}
+                  onChange={e => {
+                    if (e.target.value === "__custom__") { setCustomCat(true); set("category", ""); }
+                    else { setCustomCat(false); setNewCat(""); set("category", e.target.value); }
+                  }}>
+                  {allCats.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="__custom__">＋ Add New Category...</option>
                 </select>
+                {customCat && (
+                  <input placeholder="e.g. Jewellery" value={newCat}
+                    onChange={e => setNewCat(e.target.value)} style={{ marginTop: 8 }} />
+                )}
               </div>
               <div className="field">
                 <label>Tag</label>
                 <select value={form.tag} onChange={e => set("tag", e.target.value)}>
-                  {["New Arrival","Sale","Trending","Popular","Limited","Bestseller"].map(t => <option key={t}>{t}</option>)}
+                  {["New Arrival", "Sale", "Trending", "Popular", "Limited", "Bestseller"].map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
             </div>
@@ -358,7 +442,8 @@ function Modal({ modal, setModal, showToast }) {
           <div className="modal-body">
             <div className="field">
               <label>Coupon Code *</label>
-              <input placeholder="e.g. SAVE10" value={form.code} onChange={e => set("code", e.target.value.toUpperCase())}
+              <input placeholder="e.g. SAVE10" value={form.code}
+                onChange={e => set("code", e.target.value.toUpperCase())}
                 style={{ fontFamily: "monospace", fontSize: 16, letterSpacing: 2 }} />
             </div>
             <div className="field-row">
