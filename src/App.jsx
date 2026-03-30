@@ -182,7 +182,7 @@ export default function App() {
     if (!validate() || !cart.length) return;
     const orderData = {
       customerName: form.name, phone: form.phone, address: form.address,
-      items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, qty: i.qty })),
+      items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, qty: i.qty, unit: i.unit || "" })),
       subtotal, discount, delivery, total,
       coupon: appliedPromo?.code || null,
       status: "pending",
@@ -190,7 +190,7 @@ export default function App() {
     };
     await addDoc(collection(db, "orders"), orderData);
     const sep = "─────────────────────";
-    const itemLines = cart.map(i => `  • ${i.emoji} ${i.name} x${i.qty}  =  Rs.${(i.price * i.qty).toLocaleString()}`).join("\n");
+    const itemLines = cart.map(i => `  • ${i.emoji} ${i.name} x${i.qty}${i.unit ? " " + i.unit : ""}  =  Rs.${(i.price * i.qty).toLocaleString()}`).join("\n");
     const msg = [
       "🛒 *NEW ORDER*", sep, "*Items Ordered:*", itemLines,
       `💰 *Total: Rs.${total.toLocaleString()}*`,
@@ -290,14 +290,23 @@ export default function App() {
                             <p className="product-name">{p.name}</p>
                             <div className="price-row">
                               <span className="price">Rs.{p.price?.toLocaleString()}</span>
+                              {p.unit && <span className="unit-label">/ {p.unit}</span>}
                               {p.originalPrice && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
                             </div>
+                            {p.unitLabel && <p className="unit-sublabel">{p.unitLabel}</p>}
                             {p.stock <= 3 && p.stock > 0 && <p className="low-stock">Only {p.stock} left!</p>}
-                            {p.stock === 0 && <p className="low-stock">Out of stock</p>}
-                            <button className={`add-btn${inCart ? " in-cart" : ""}${p.stock === 0 ? " disabled" : ""}`}
-                              onClick={() => p.stock > 0 && addToCart(p)} disabled={p.stock === 0}>
-                              {p.stock === 0 ? "Out of Stock" : inCart ? `✓ In Cart (${inCart.qty})` : "+ Add to Cart"}
-                            </button>
+                            {p.stock === 0
+                              ? <button className="add-btn disabled" disabled>Out of Stock</button>
+                              : inCart ? (
+                                <div className="inline-qty">
+                                  <button className="iq-btn" onClick={() => changeQty(inCart.id, -1)}>−</button>
+                                  <span className="iq-num">{inCart.qty}</span>
+                                  <button className="iq-btn" onClick={() => changeQty(inCart.id, 1)}>+</button>
+                                </div>
+                              ) : (
+                                <button className="add-btn" onClick={() => addToCart(p)}>+ Add to Cart</button>
+                              )
+                            }
                           </div>
                         </div>
                       );
@@ -333,7 +342,7 @@ export default function App() {
                     </div>
                     <div className="cart-info">
                       <p className="cart-name">{item.name}</p>
-                      <p className="cart-price">Rs.{item.price?.toLocaleString()} each</p>
+                      <p className="cart-price">Rs.{item.price?.toLocaleString()} {item.unit ? `/ ${item.unit}` : "each"}</p>
                     </div>
                     <div className="qty-ctrl">
                       <button className="qty-btn" onClick={() => changeQty(item.id, -1)}>−</button>
@@ -404,7 +413,7 @@ export default function App() {
                     <p className="sum-heading">Order Summary</p>
                     {cart.map(i => (
                       <div key={i.id} className="sum-row sm">
-                        <span>{i.emoji} {i.name} ×{i.qty}</span>
+                        <span>{i.emoji} {i.name} ×{i.qty}{i.unit ? ` ${i.unit}` : ""}</span>
                         <span>Rs.{(i.price * i.qty).toLocaleString()}</span>
                       </div>
                     ))}

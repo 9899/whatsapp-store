@@ -350,6 +350,8 @@ function Modal({ modal, setModal, showToast, categories }) {
         originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
         stock: Number(form.stock) || 0, category: finalCat,
         tag: form.tag, emoji: form.emoji, image: form.image || "",
+        unit: form.unit || "Pcs",
+        unitLabel: form.unitLabel || "",
       };
       if (editing) await updateDoc(doc(db, "products", form.id), data);
       else await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
@@ -412,6 +414,18 @@ function Modal({ modal, setModal, showToast, categories }) {
               <div className="field">
                 <label>Stock</label>
                 <input type="number" placeholder="10" value={form.stock} onChange={e => set("stock", e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Unit</label>
+                <select value={form.unit || "Pcs"} onChange={e => set("unit", e.target.value)}>
+                  {["Pcs","Pkt","Box","Kg","Gm","Ltr","Ml","Bag","Set","Pair","Roll","Dozen"].map(u => <option key={u}>{u}</option>)}
+                </select>
+              </div>
+              <div className="field" style={{ flex: 2 }}>
+                <label>Unit Label (optional)</label>
+                <input placeholder="e.g. per box of 10, per kg" value={form.unitLabel || ""} onChange={e => set("unitLabel", e.target.value)} />
               </div>
             </div>
             <div className="field-row">

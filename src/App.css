@@ -69,7 +69,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .price-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
 .price { font-size: 17px; font-weight: 700; }
 .orig-price { font-size: 13px; color: var(--tx3); text-decoration: line-through; }
-.low-stock { font-size: 11px; color: #e05020; font-weight: 600; margin-bottom: 6px; animation: pulse 1.5s infinite; }
+.unit-label { font-size: 12px; color: var(--tx2); font-weight: 500; margin-left: 2px; }
+.unit-sublabel { font-size: 11px; color: var(--tx3); margin-bottom: 6px; }
+.inline-qty { display: flex; align-items: center; gap: 0; margin-top: 6px; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+.iq-btn { width: 36px; height: 34px; border: none; background: var(--surface); color: var(--tx1); font-size: 18px; font-weight: 700; cursor: pointer; transition: background .15s; }
+.iq-btn:hover { background: var(--border); }
+.iq-num { flex: 1; text-align: center; font-weight: 700; font-size: 15px; color: var(--tx1); }
 .add-btn { width: 100%; padding: 9px 0; background: var(--tx1); color: var(--card); border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background .25s, transform .1s; margin-top: 6px; }
 .add-btn:active { transform: scale(.97); }
 .add-btn.in-cart { background: #1a8a4a; }
