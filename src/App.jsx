@@ -143,7 +143,11 @@ export default function App() {
     if (p) toast(`${p.name} removed`, "default");
   };
 
-  const changeQty = (id, d) => setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + d) } : i));
+  const changeQty = (id, d) => setCart(prev => {
+  const item = prev.find(i => i.id === id);
+  if (item && item.qty + d < 1) return prev.filter(i => i.id !== id);
+  return prev.map(i => i.id === id ? { ...i, qty: i.qty + d } : i);
+});
 
   const toggleWish = p => {
     setWishlist(prev => {
