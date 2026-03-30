@@ -144,10 +144,10 @@ export default function App() {
   };
 
   const changeQty = (id, d) => setCart(prev => {
-  const item = prev.find(i => i.id === id);
-  if (item && item.qty + d < 1) return prev.filter(i => i.id !== id);
-  return prev.map(i => i.id === id ? { ...i, qty: i.qty + d } : i);
-});
+    const item = prev.find(i => i.id === id);
+    if (item && item.qty + d < 1) return prev.filter(i => i.id !== id);
+    return prev.map(i => i.id === id ? { ...i, qty: i.qty + d } : i);
+  });
 
   const toggleWish = p => {
     setWishlist(prev => {
@@ -298,19 +298,15 @@ export default function App() {
                               {p.originalPrice && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
                             </div>
                             {p.unitLabel && <p className="unit-sublabel">{p.unitLabel}</p>}
-                            {p.stock <= 3 && p.stock > 0 && <p className="low-stock">Only {p.stock} left!</p>}
-                            {p.stock === 0
-                              ? <button className="add-btn disabled" disabled>Out of Stock</button>
-                              : inCart ? (
-                                <div className="inline-qty">
-                                  <button className="iq-btn" onClick={() => changeQty(inCart.id, -1)}>−</button>
-                                  <span className="iq-num">{inCart.qty}</span>
-                                  <button className="iq-btn" onClick={() => changeQty(inCart.id, 1)}>+</button>
-                                </div>
-                              ) : (
-                                <button className="add-btn" onClick={() => addToCart(p)}>+ Add to Cart</button>
-                              )
-                            }
+                            {inCart ? (
+                              <div className="inline-qty">
+                                <button className="iq-btn" onClick={() => changeQty(inCart.id, -1)}>−</button>
+                                <span className="iq-num">{inCart.qty}</span>
+                                <button className="iq-btn" onClick={() => changeQty(inCart.id, 1)}>+</button>
+                              </div>
+                            ) : (
+                              <button className="add-btn" onClick={() => addToCart(p)}>+ Add to Cart</button>
+                            )}
                           </div>
                         </div>
                       );
