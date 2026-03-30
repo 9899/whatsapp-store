@@ -90,7 +90,7 @@ export default function App() {
   const [waUrl, setWaUrl]             = useState("");
   const [confetti, setConfetti]       = useState(false);
   const [cartShake, setCartShake]     = useState(false);
-  const tid = useRef(0);
+  const [selectedSizes, setSelectedSizes] = useState({});
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, "products"), s => {
@@ -129,24 +129,31 @@ export default function App() {
   }, []);
 
   const addToCart = p => {
+    const size = selectedSizes[p.id] || (p.sizes?.length ? null : "");
+    if (p.sizes?.length && !size) {
+      toast("Please select a size first", "error"); return;
+    }
+    const cartId = p.sizes?.length ? `${p.id}_${size}` : p.id;
     setCart(prev => {
-      const ex = prev.find(i => i.id === p.id);
-      return ex ? prev.map(i => i.id === p.id ? { ...i, qty: i.qty + 1 } : i) : [...prev, { ...p, qty: 1 }];
+      const ex = prev.find(i => i.cartId === cartId);
+      return ex
+        ? prev.map(i => i.cartId === cartId ? { ...i, qty: i.qty + 1 } : i)
+        : [...prev, { ...p, cartId, size: size || null, qty: 1 }];
     });
     setCartShake(true); setTimeout(() => setCartShake(false), 500);
-    toast(`${p.emoji} ${p.name} added!`, "success");
+    toast(`${p.emoji} ${p.name}${size ? ` (${size})` : ""} added!`, "success");
   };
 
   const removeFromCart = id => {
-    const p = cart.find(i => i.id === id);
-    setCart(prev => prev.filter(i => i.id !== id));
+    const p = cart.find(i => i.cartId === id || i.id === id);
+    setCart(prev => prev.filter(i => i.cartId !== id && i.id !== id));
     if (p) toast(`${p.name} removed`, "default");
   };
 
   const changeQty = (id, d) => setCart(prev => {
-    const item = prev.find(i => i.id === id);
-    if (item && item.qty + d < 1) return prev.filter(i => i.id !== id);
-    return prev.map(i => i.id === id ? { ...i, qty: i.qty + d } : i);
+    const item = prev.find(i => i.cartId === id || i.id === id);
+    if (item && item.qty + d < 1) return prev.filter(i => i.cartId !== id && i.id !== id);
+    return prev.map(i => (i.cartId === id || i.id === id) ? { ...i, qty: i.qty + d } : i);
   });
 
   const toggleWish = p => {
@@ -278,16 +285,17 @@ export default function App() {
                 : filtered.length === 0
                   ? <div className="empty-state"><div>🔍</div><p>No products found</p></div>
                   : filtered.map(p => {
-                      const inCart = cart.find(i => i.id === p.id);
+                      const inCart = cart.find(i => i.id === p.id && (!p.sizes?.length || i.size === selectedSizes[p.id]));
                       const wished = wishlist.includes(p.id);
                       const disc   = p.originalPrice ? Math.round((1 - p.price / p.originalPrice) * 100) : null;
+                      const cartId = p.sizes?.length ? `${p.id}_${selectedSizes[p.id]}` : p.id;
                       return (
                         <div key={p.id} className="card product-card">
                           {disc && <span className="disc-badge">-{disc}%</span>}
                           <button className="wish-btn" onClick={() => toggleWish(p)}>{wished ? "❤️" : "🤍"}</button>
                           <div className="product-img">
                             {p.image
-                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "contain", background: "var(--surface)" }} />
+                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                               : <span style={{ fontSize: 50 }}>{p.emoji || "🛍️"}</span>}
                           </div>
                           <div className="product-body">
@@ -298,11 +306,22 @@ export default function App() {
                               {p.originalPrice && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
                             </div>
                             {p.unitLabel && <p className="unit-sublabel">{p.unitLabel}</p>}
+                            {p.sizes?.length > 0 && (
+                              <div className="size-wrap">
+                                {p.sizes.map(s => (
+                                  <button key={s}
+                                    className={`size-btn${selectedSizes[p.id] === s ? " active" : ""}`}
+                                    onClick={() => setSelectedSizes(prev => ({ ...prev, [p.id]: s }))}>
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             {inCart ? (
                               <div className="inline-qty">
-                                <button className="iq-btn" onClick={() => changeQty(inCart.id, -1)}>−</button>
+                                <button className="iq-btn" onClick={() => changeQty(inCart.cartId || inCart.id, -1)}>−</button>
                                 <span className="iq-num">{inCart.qty}</span>
-                                <button className="iq-btn" onClick={() => changeQty(inCart.id, 1)}>+</button>
+                                <button className="iq-btn" onClick={() => changeQty(inCart.cartId || inCart.id, 1)}>+</button>
                               </div>
                             ) : (
                               <button className="add-btn" onClick={() => addToCart(p)}>+ Add to Cart</button>
@@ -334,24 +353,24 @@ export default function App() {
             ) : (
               <>
                 {cart.map(item => (
-                  <div key={item.id} className="cart-item">
+                  <div key={item.cartId || item.id} className="cart-item">
                     <div className="cart-emoji">
                       {item.image
                         ? <img src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10 }} />
                         : item.emoji}
                     </div>
                     <div className="cart-info">
-                      <p className="cart-name">{item.name}</p>
+                      <p className="cart-name">{item.name}{item.size ? <span className="cart-size"> — {item.size}</span> : ""}</p>
                       <p className="cart-price">Rs.{item.price?.toLocaleString()} {item.unit ? `/ ${item.unit}` : "each"}</p>
                     </div>
                     <div className="qty-ctrl">
-                      <button className="qty-btn" onClick={() => changeQty(item.id, -1)}>−</button>
+                      <button className="qty-btn" onClick={() => changeQty(item.cartId || item.id, -1)}>−</button>
                       <span className="qty-num">{item.qty}</span>
-                      <button className="qty-btn" onClick={() => changeQty(item.id, 1)}>+</button>
+                      <button className="qty-btn" onClick={() => changeQty(item.cartId || item.id, 1)}>+</button>
                     </div>
                     <div className="cart-total">
                       <p>Rs.{(item.price * item.qty).toLocaleString()}</p>
-                      <button className="remove-btn" onClick={() => removeFromCart(item.id)}>Remove</button>
+                      <button className="remove-btn" onClick={() => removeFromCart(item.cartId || item.id)}>Remove</button>
                     </div>
                   </div>
                 ))}

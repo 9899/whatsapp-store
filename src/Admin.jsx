@@ -350,7 +350,7 @@ function Modal({ modal, setModal, showToast, categories }) {
         originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
         stock: Number(form.stock) || 0, category: finalCat,
         tag: form.tag, emoji: form.emoji, image: form.image || "",
-        unit: form.unit || "Pcs",
+        sizes: form.sizes ? form.sizes.split(",").map(s => s.trim()).filter(Boolean) : [],
         unitLabel: form.unitLabel || "",
       };
       if (editing) await updateDoc(doc(db, "products", form.id), data);
@@ -391,6 +391,12 @@ function Modal({ modal, setModal, showToast, categories }) {
                 </div>
               </div>
               {uploading && <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>⏳ Uploading...</p>}
+            </div>
+            {/* Sizes */}
+            <div className="field">
+              <label>Sizes <span style={{fontWeight:400,color:"#aaa"}}>(optional — comma separated e.g. S, M, L, XL or 250ml, 500ml, 1L)</span></label>
+              <input placeholder="e.g. S, M, L, XL or leave blank if no sizes" value={form.sizes || ""}
+                onChange={e => set("sizes", e.target.value)} />
             </div>
             <div className="field-row">
               <div className="field" style={{ flex: 1 }}>
