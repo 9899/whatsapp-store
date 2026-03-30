@@ -229,13 +229,36 @@ export default function Admin() {
           </div>
         )}
 
-        {/* ── SETTINGS ── */}
         {tab === 3 && (
           <div>
             <div className="page-header"><h2>Store Settings</h2></div>
             <div className="settings-card">
+              <p style={{fontWeight:700,fontSize:15,marginBottom:16}}>🏪 Branding</p>
               {[
-                { label: "Store Name",               key: "storeName",         ph: "e.g. My Fashion Store" },
+                { label: "Store Name",     key: "storeName",  ph: "e.g. My Hardware Store" },
+                { label: "Logo Image URL", key: "logoUrl",    ph: "https://... (paste image URL)" },
+                { label: "Tagline",        key: "tagline",    ph: "e.g. Quality tools at best prices" },
+                { label: "Primary Color",  key: "primaryColor", ph: "#25D366" },
+              ].map(({ label, key, ph }) => (
+                <div key={key} className="field">
+                  <label>{label}</label>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <input placeholder={ph} value={settings[key] || ""}
+                      onChange={e => setSettings({ ...settings, [key]: e.target.value })} style={{flex:1}}/>
+                    {key==="primaryColor" && (
+                      <input type="color" value={settings.primaryColor||"#25D366"}
+                        onChange={e=>setSettings({...settings,primaryColor:e.target.value})}
+                        style={{width:40,height:36,border:"none",cursor:"pointer",borderRadius:8}}/>
+                    )}
+                  </div>
+                  {key==="logoUrl" && settings.logoUrl && (
+                    <img src={settings.logoUrl} alt="logo preview" style={{height:48,marginTop:8,borderRadius:8,objectFit:"contain",background:"#f5f5f5",padding:4}}/>
+                  )}
+                </div>
+              ))}
+
+              <p style={{fontWeight:700,fontSize:15,marginBottom:16,marginTop:24}}>🚚 Delivery</p>
+              {[
                 { label: "WhatsApp Number",           key: "whatsapp",          ph: "e.g. 919899563148" },
                 { label: "Delivery Fee (Rs.)",        key: "deliveryFee",       ph: "e.g. 49" },
                 { label: "Free Delivery Above (Rs.)", key: "freeDeliveryAbove", ph: "e.g. 999" },
@@ -246,10 +269,26 @@ export default function Admin() {
                     onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
                 </div>
               ))}
+
+              <p style={{fontWeight:700,fontSize:15,marginBottom:16,marginTop:24}}>📍 Contact & Footer</p>
+              {[
+                { label: "Phone Number",    key: "phone",     ph: "e.g. +91 98995 63148" },
+                { label: "Email Address",   key: "email",     ph: "e.g. info@mystore.com" },
+                { label: "Physical Address",key: "address",   ph: "e.g. 123 Market St, Delhi" },
+                { label: "Business Hours",  key: "hours",     ph: "e.g. Mon–Sat: 9am – 7pm" },
+                { label: "Google Maps URL", key: "mapsUrl",   ph: "https://maps.google.com/..." },
+              ].map(({ label, key, ph }) => (
+                <div key={key} className="field">
+                  <label>{label}</label>
+                  <input placeholder={ph} value={settings[key] || ""}
+                    onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
+                </div>
+              ))}
+
               <button className="btn-primary" onClick={saveSettings}>💾 Save Settings</button>
             </div>
 
-            {/* ── CATEGORY MANAGER ── */}
+            {/* Category Manager */}
             <div className="page-header" style={{ marginTop: 32 }}>
               <h2>Categories <span className="count">{categories.length}</span></h2>
             </div>
@@ -391,12 +430,6 @@ function Modal({ modal, setModal, showToast, categories }) {
                 </div>
               </div>
               {uploading && <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>⏳ Uploading...</p>}
-            </div>
-            {/* Sizes */}
-            <div className="field">
-              <label>Sizes <span style={{fontWeight:400,color:"#aaa"}}>(optional — comma separated e.g. S, M, L, XL or 250ml, 500ml, 1L)</span></label>
-              <input placeholder="e.g. S, M, L, XL or leave blank if no sizes" value={form.sizes || ""}
-                onChange={e => set("sizes", e.target.value)} />
             </div>
             <div className="field-row">
               <div className="field" style={{ flex: 1 }}>

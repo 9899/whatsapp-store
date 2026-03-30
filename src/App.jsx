@@ -73,7 +73,13 @@ export default function App() {
   const [dark, setDark]               = useState(false);
   const [products, setProducts]       = useState([]);
   const [coupons, setCoupons]         = useState([]);
-  const [settings, setSettings]       = useState({ storeName: "Order Store", whatsapp: "919899563148", deliveryFee: "49", freeDeliveryAbove: "999" });
+  const [settings, setSettings] = useState({
+    storeName: "Order Store", whatsapp: "919899563148",
+    deliveryFee: "49", freeDeliveryAbove: "999",
+    logoUrl: "", tagline: "Fast delivery via WhatsApp",
+    primaryColor: "#25D366", phone: "", email: "",
+    address: "", hours: "", mapsUrl: "",
+  });
   const [loaded, setLoaded]           = useState(false);
   const [tab, setTab]                 = useState(0);
   const [cart, setCart]               = useState([]);
@@ -228,27 +234,41 @@ export default function App() {
     p.name?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const pc = settings.primaryColor || "#25D366";
+
   return (
     <div className={`app${dark ? " dark" : ""}`}>
       <Toast toasts={toasts} />
       <Confetti run={confetti} />
 
-      <header className="header">
+      {/* ── HEADER ── */}
+      <header className="header" style={{borderBottom:`3px solid ${pc}`}}>
         <div className="header-inner">
-          <div>
-            <h1 className="logo">{settings.storeName || "Order Store"}</h1>
-            <p className="tagline">Fast delivery via WhatsApp</p>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {settings.logoUrl
+              ? <img src={settings.logoUrl} alt="logo" style={{height:44,objectFit:"contain",borderRadius:8}}/>
+              : <div style={{width:44,height:44,borderRadius:10,background:pc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff",fontWeight:700}}>
+                  {(settings.storeName||"O")[0]}
+                </div>
+            }
+            <div>
+              <h1 className="logo" style={{color:pc}}>{settings.storeName || "Order Store"}</h1>
+              <p className="tagline">{settings.tagline || "Fast delivery via WhatsApp"}</p>
+            </div>
           </div>
           <div className="header-actions">
             <button className="icon-btn" onClick={() => setDark(d => !d)}>{dark ? "☀️" : "🌙"}</button>
-            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)}>
+            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)}
+              style={{background:pc}}>
               🛒 Cart {itemCount > 0 && <span className="badge">{itemCount}</span>}
             </button>
           </div>
         </div>
         <nav className="tab-bar">
           {["Shop", "Cart", "Checkout"].map((t, i) => (
-            <button key={t} className={`tab${tab === i ? " active" : ""}`} onClick={() => setTab(i)}>
+            <button key={t} className={`tab${tab === i ? " active" : ""}`}
+              style={tab===i?{borderBottomColor:pc,color:pc}:{}}
+              onClick={() => setTab(i)}>
               {t}{i === 1 && itemCount > 0 ? ` (${itemCount})` : ""}
             </button>
           ))}
@@ -256,6 +276,19 @@ export default function App() {
       </header>
 
       <main className="main">
+        {/* ── HERO BANNER (shop tab only) ── */}
+        {tab === 0 && (
+          <div className="hero" style={{background:`linear-gradient(135deg, ${pc}22 0%, ${pc}44 100%)`,borderBottom:`1px solid ${pc}33`}}>
+            <div className="hero-inner">
+              {settings.logoUrl && <img src={settings.logoUrl} alt="logo" className="hero-logo"/>}
+              <div>
+                <h2 className="hero-title" style={{color:pc}}>{settings.storeName || "Order Store"}</h2>
+                <p className="hero-sub">{settings.tagline || "Quality products, fast delivery"}</p>
+                {settings.phone && <a href={`tel:${settings.phone}`} className="hero-contact" style={{color:pc}}>📞 {settings.phone}</a>}
+              </div>
+            </div>
+          </div>
+        )}
         {tab === 0 && (
           <div className="fade-in">
             <div className="search-wrap">
@@ -454,6 +487,46 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* ── FOOTER ── */}
+      {(settings.phone||settings.email||settings.address||settings.hours||settings.mapsUrl) && (
+        <footer className="footer" style={{borderTop:`3px solid ${pc}`}}>
+          <div className="footer-inner">
+            <div className="footer-brand">
+              {settings.logoUrl
+                ? <img src={settings.logoUrl} alt="logo" style={{height:40,objectFit:"contain",marginBottom:8}}/>
+                : <div style={{fontSize:28,fontWeight:700,color:pc,marginBottom:4}}>{settings.storeName}</div>
+              }
+              <p style={{fontSize:13,color:"var(--tx2)",maxWidth:220}}>{settings.tagline}</p>
+            </div>
+            <div className="footer-contact">
+              <p className="footer-heading">Contact Us</p>
+              {settings.phone && <a href={`tel:${settings.phone}`} className="footer-link">📞 {settings.phone}</a>}
+              {settings.email && <a href={`mailto:${settings.email}`} className="footer-link">✉️ {settings.email}</a>}
+              {settings.whatsapp && (
+                <a href={`https://wa.me/${settings.whatsapp}`} target="_blank" rel="noreferrer"
+                  className="footer-wa-btn" style={{background:pc}}>
+                  💬 Chat on WhatsApp
+                </a>
+              )}
+            </div>
+            <div className="footer-info">
+              <p className="footer-heading">Visit Us</p>
+              {settings.address && <p className="footer-text">📍 {settings.address}</p>}
+              {settings.hours && <p className="footer-text">🕐 {settings.hours}</p>}
+              {settings.mapsUrl && (
+                <a href={settings.mapsUrl} target="_blank" rel="noreferrer"
+                  className="footer-map-btn" style={{borderColor:pc,color:pc}}>
+                  🗺️ View on Google Maps
+                </a>
+              )}
+            </div>
+          </div>
+          <div className="footer-bottom">
+            <p>© {new Date().getFullYear()} {settings.storeName || "Order Store"}. All rights reserved.</p>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
