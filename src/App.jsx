@@ -1,448 +1,411 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { db } from "./firebase";
-import { collection, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore";
-import "./App.css";
+import { useState, useEffect } from "react";
+import { auth, db, googleProvider } from "./firebase";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import {
+  collection, addDoc, updateDoc, deleteDoc,
+  doc, onSnapshot, serverTimestamp, setDoc, getDoc
+} from "firebase/firestore";
+import { uploadImage } from "./cloudinary";
+import "./Admin.css";
 
-const CATEGORIES_DEFAULT = ["All","Clothing","Footwear","Electronics","Accessories","Bags"];
+const TABS = ["Products", "Coupons", "Orders", "Settings"];
 
-function useAnimNum(target) {
-  const [v, setV] = useState(target);
-  const prev = useRef(target);
+export default function Admin() {
+  const [user, setUser]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [tab, setTab]           = useState(0);
+  const [products, setProducts] = useState([]);
+  const [coupons, setCoupons]   = useState([]);
+  const [orders, setOrders]     = useState([]);
+  const [settings, setSettings] = useState({ storeName: "", whatsapp: "", deliveryFee: "49", freeDeliveryAbove: "999" });
+  const [toast, setToast]       = useState(null);
+  const [modal, setModal]       = useState(null); // {type: 'product'|'coupon', data}
+
+  // Auth
   useEffect(() => {
-    const diff = target - prev.current;
-    if (!diff) return;
-    const start = prev.current, t0 = performance.now();
-    const go = now => {
-      const p = Math.min((now - t0) / 400, 1);
-      setV(Math.round(start + diff * (1 - Math.pow(1 - p, 3))));
-      if (p < 1) requestAnimationFrame(go); else prev.current = target;
-    };
-    requestAnimationFrame(go);
-  }, [target]);
-  return v;
-}
+    const unsub = onAuthStateChanged(auth, u => { setUser(u); setLoading(false); });
+    return unsub;
+  }, []);
 
-function Toast({ toasts }) {
-  return (
-    <div className="toast-wrap">
-      {toasts.map(t => (
-        <div key={t.id} className={`toast toast-${t.type}${t.out ? " out" : ""}`}>{t.msg}</div>
-      ))}
-    </div>
-  );
-}
-
-function Confetti({ run }) {
-  const [pieces, setPieces] = useState([]);
+  // Firestore listeners
   useEffect(() => {
-    if (!run) return;
-    const cols = ["#25D366","#3b82f6","#f59e0b","#e03030","#a855f7","#ec4899"];
-    setPieces(Array.from({ length: 60 }, (_, i) => ({
-      id: i, x: Math.random() * 100, delay: Math.random() * .8,
-      color: cols[i % cols.length], size: 6 + Math.random() * 8, rot: Math.random() * 360,
-    })));
-    const t = setTimeout(() => setPieces([]), 3200);
-    return () => clearTimeout(t);
-  }, [run]);
-  if (!pieces.length) return null;
-  return (
-    <div className="confetti-wrap">
-      {pieces.map(p => (
-        <div key={p.id} className="confetti-piece" style={{
-          left: `${p.x}%`, width: p.size, height: p.size,
-          background: p.color, borderRadius: p.size > 10 ? "50%" : 2,
-          animationDelay: `${p.delay}s`, transform: `rotate(${p.rot}deg)`,
-        }} />
-      ))}
-    </div>
-  );
-}
+    if (!user) return;
+    const u1 = onSnapshot(collection(db, "products"), s => setProducts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const u2 = onSnapshot(collection(db, "coupons"),  s => setCoupons(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const u3 = onSnapshot(collection(db, "orders"),   s => setOrders(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.createdAt?.seconds - a.createdAt?.seconds)));
+    const u4 = getDoc(doc(db, "settings", "store")).then(d => { if (d.exists()) setSettings(d.data()); });
+    return () => { u1(); u2(); u3(); };
+  }, [user]);
 
-function Skeleton() {
-  return (
-    <div className="card skel">
-      <div className="skel-img shimmer" />
-      <div className="skel-body">
-        <div className="skel-line shimmer" style={{ width: "75%" }} />
-        <div className="skel-line shimmer" style={{ width: "50%" }} />
-        <div className="skel-line shimmer" style={{ width: "100%", height: 34, borderRadius: 10 }} />
+  const showToast = (msg, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const login = async () => {
+    try { await signInWithPopup(auth, googleProvider); }
+    catch (e) { showToast("Login failed: " + e.message, false); }
+  };
+
+  const logout = () => signOut(auth);
+
+  // Settings save
+  const saveSettings = async () => {
+    await setDoc(doc(db, "settings", "store"), settings);
+    showToast("Settings saved!");
+  };
+
+  // ── LOGIN SCREEN ──
+  if (loading) return <div className="admin-center"><div className="spinner"/></div>;
+
+  if (!user) return (
+    <div className="admin-center">
+      <div className="login-card">
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🛒</div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Order Store CRM</h1>
+        <p style={{ color: "#888", marginBottom: 28, fontSize: 14 }}>Sign in to manage your store</p>
+        <button className="google-btn" onClick={login}>
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Continue with Google
+        </button>
       </div>
     </div>
   );
-}
 
-export default function App() {
-  const [dark, setDark]               = useState(false);
-  const [products, setProducts]       = useState([]);
-  const [coupons, setCoupons]         = useState([]);
-  const [settings, setSettings]       = useState({ storeName: "Order Store", whatsapp: "919899563148", deliveryFee: "49", freeDeliveryAbove: "999" });
-  const [loaded, setLoaded]           = useState(false);
-  const [tab, setTab]                 = useState(0);
-  const [cart, setCart]               = useState([]);
-  const [wishlist, setWishlist]       = useState([]);
-  const [search, setSearch]           = useState("");
-  const [cat, setCat]                 = useState("All");
-  const [toasts, setToasts]           = useState([]);
-  const [promoInput, setPromoInput]   = useState("");
-  const [appliedPromo, setAppliedPromo] = useState(null);
-  const [promoMsg, setPromoMsg]       = useState(null);
-  const [form, setForm]               = useState({ name: "", phone: "", address: "" });
-  const [errors, setErrors]           = useState({});
-  const [sent, setSent]               = useState(false);
-  const [waUrl, setWaUrl]             = useState("");
-  const [confetti, setConfetti]       = useState(false);
-  const [cartShake, setCartShake]     = useState(false);
-  const tid = useRef(0);
-
-  // Load from Firebase
-  useEffect(() => {
-    const u1 = onSnapshot(collection(db, "products"), s => {
-      setProducts(s.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoaded(true);
-    });
-    const u2 = onSnapshot(collection(db, "coupons"), s => {
-      setCoupons(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.active));
-    });
-    getDoc(doc(db, "settings", "store")).then(d => { if (d.exists()) setSettings(d.data()); });
-    return () => { u1(); u2(); };
-  }, []);
-
-  useEffect(() => { document.documentElement.setAttribute("data-theme", dark ? "dark" : "light"); }, [dark]);
-
-  const freeAbove   = Number(settings.freeDeliveryAbove) || 999;
-  const deliveryFee = Number(settings.deliveryFee) || 49;
-  const waNumber    = settings.whatsapp || "919899563148";
-
-  const subtotal  = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const discount  = appliedPromo
-    ? (appliedPromo.type === "percent"
-        ? Math.round(subtotal * appliedPromo.value / 100)
-        : appliedPromo.value)
-    : 0;
-  const delivery  = subtotal >= freeAbove ? 0 : deliveryFee;
-  const total     = Math.max(0, subtotal - discount + delivery);
-  const itemCount = cart.reduce((s, i) => s + i.qty, 0);
-  const animTotal = useAnimNum(total);
-
-  const toast = useCallback((msg, type = "default") => {
-    const id = ++tid.current;
-    setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.map(t => t.id === id ? { ...t, out: true } : t)), 2200);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 2550);
-  }, []);
-
-  const addToCart = p => {
-    setCart(prev => {
-      const ex = prev.find(i => i.id === p.id);
-      return ex ? prev.map(i => i.id === p.id ? { ...i, qty: i.qty + 1 } : i) : [...prev, { ...p, qty: 1 }];
-    });
-    setCartShake(true); setTimeout(() => setCartShake(false), 500);
-    toast(`${p.emoji} ${p.name} added!`, "success");
-  };
-
-  const removeFromCart = id => {
-    const p = cart.find(i => i.id === id);
-    setCart(prev => prev.filter(i => i.id !== id));
-    if (p) toast(`${p.name} removed`, "default");
-  };
-
-  const changeQty = (id, d) => setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + d) } : i));
-
-  const toggleWish = p => {
-    setWishlist(prev => {
-      const has = prev.includes(p.id);
-      toast(has ? "Removed from wishlist" : `${p.emoji} Wishlisted!`, "info");
-      return has ? prev.filter(id => id !== p.id) : [...prev, p.id];
-    });
-  };
-
-  const applyPromo = () => {
-    const code = promoInput.trim().toUpperCase();
-    const found = coupons.find(c => c.code === code);
-    if (found) {
-      if (found.minOrder && subtotal < found.minOrder) {
-        setPromoMsg({ ok: false, text: `Min order Rs.${found.minOrder} required` }); return;
-      }
-      setAppliedPromo(found);
-      setPromoMsg({ ok: true, text: `✓ ${code} applied!` });
-      toast("Promo applied!", "success");
-    } else {
-      setAppliedPromo(null);
-      setPromoMsg({ ok: false, text: "Invalid coupon code" });
-    }
-  };
-
-  const validate = () => {
-    const e = {};
-    if (!form.name.trim())             e.name    = "Name is required";
-    if (!/^\d{10}$/.test(form.phone))  e.phone   = "Enter valid 10-digit number";
-    if (!form.address.trim())          e.address = "Address is required";
-    setErrors(e);
-    return !Object.keys(e).length;
-  };
-
-  const placeOrder = async () => {
-    if (!validate() || !cart.length) return;
-    // Save order to Firestore
-    const orderData = {
-      customerName: form.name, phone: form.phone, address: form.address,
-      items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, qty: i.qty })),
-      subtotal, discount, delivery, total,
-      coupon: appliedPromo?.code || null,
-      status: "pending",
-      createdAt: serverTimestamp(),
-    };
-    await addDoc(collection(db, "orders"), orderData);
-
-    // Build WhatsApp message
-    const sep = "─────────────────────";
-    const itemLines = cart.map(i => `  • ${i.emoji} ${i.name} x${i.qty}  =  Rs.${(i.price * i.qty).toLocaleString()}`).join("\n");
-    const msg = [
-      "🛒 *NEW ORDER*",
-      sep,
-      "*Items Ordered:*",
-      itemLines,
-      `💰 *Total: Rs.${total.toLocaleString()}*`,
-      appliedPromo ? `🏷️ Promo (${appliedPromo.code}): -Rs.${discount.toLocaleString()}` : null,
-      `🚚 Delivery: ${delivery === 0 ? "FREE" : `Rs.${delivery}`}`,
-      sep,
-      "👤 *Customer Details:*",
-      `  Name: ${form.name}`,
-      `  Phone: ${form.phone}`,
-      `  Address: ${form.address}`,
-      sep,
-      "_Sent via WhatsApp Order App_",
-    ].filter(Boolean).join("\n");
-
-    setWaUrl(`https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`);
-    setSent(true);
-    setConfetti(true);
-    setTimeout(() => setConfetti(false), 200);
-  };
-
-  const resetApp = () => {
-    setCart([]); setWishlist([]); setAppliedPromo(null); setPromoInput("");
-    setPromoMsg(null); setForm({ name: "", phone: "", address: "" }); setErrors({});
-    setSent(false); setWaUrl(""); setTab(0);
-  };
-
-  const categories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))];
-  const filtered = products.filter(p =>
-    (cat === "All" || p.category === cat) &&
-    p.name?.toLowerCase().includes(search.toLowerCase())
-  );
-
+  // ── MAIN CRM ──
   return (
-    <div className={`app${dark ? " dark" : ""}`}>
-      <Toast toasts={toasts} />
-      <Confetti run={confetti} />
+    <div className="admin-wrap">
+      {toast && <div className={`admin-toast${toast.ok ? "" : " err"}`}>{toast.msg}</div>}
+      {modal && <Modal modal={modal} setModal={setModal} showToast={showToast} />}
 
-      <header className="header">
-        <div className="header-inner">
-          <div>
-            <h1 className="logo">{settings.storeName || "Order Store"}</h1>
-            <p className="tagline">Fast delivery via WhatsApp</p>
-          </div>
-          <div className="header-actions">
-            <button className="icon-btn" onClick={() => setDark(d => !d)}>{dark ? "☀️" : "🌙"}</button>
-            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)}>
-              🛒 Cart {itemCount > 0 && <span className="badge">{itemCount}</span>}
-            </button>
-          </div>
-        </div>
-        <nav className="tab-bar">
-          {["Shop", "Cart", "Checkout"].map((t, i) => (
-            <button key={t} className={`tab${tab === i ? " active" : ""}`} onClick={() => setTab(i)}>
-              {t}{i === 1 && itemCount > 0 ? ` (${itemCount})` : ""}
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-logo">🛒 CRM</div>
+        <nav>
+          {TABS.map((t, i) => (
+            <button key={t} className={`side-item${tab === i ? " active" : ""}`} onClick={() => setTab(i)}>
+              {["📦","🏷️","📋","⚙️"][i]} {t}
             </button>
           ))}
         </nav>
-      </header>
+        <div className="sidebar-user">
+          <img src={user.photoURL} alt="" className="avatar" />
+          <div>
+            <p className="uname">{user.displayName?.split(" ")[0]}</p>
+            <button className="logout-btn" onClick={logout}>Sign out</button>
+          </div>
+        </div>
+      </aside>
 
-      <main className="main">
+      {/* Main */}
+      <main className="admin-main">
 
+        {/* ── PRODUCTS ── */}
         {tab === 0 && (
-          <div className="fade-in">
-            <div className="search-wrap">
-              <span className="search-icon">🔍</span>
-              <input className="search-input" placeholder="Search products…" value={search} onChange={e => setSearch(e.target.value)} />
+          <div>
+            <div className="page-header">
+              <h2>Products <span className="count">{products.length}</span></h2>
+              <button className="btn-primary" onClick={() => setModal({ type: "product", data: null })}>+ Add Product</button>
             </div>
-            <div className="cat-bar">
-              {categories.map(c => (
-                <button key={c} className={`cat-btn${cat === c ? " active" : ""}`} onClick={() => setCat(c)}>{c}</button>
-              ))}
+            <div className="product-table-wrap">
+              <table className="admin-table">
+                <thead><tr><th>Image</th><th>Name</th><th>Price</th><th>Original</th><th>Stock</th><th>Category</th><th>Tag</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {products.map(p => (
+                    <tr key={p.id}>
+                      <td><img src={p.image || "https://via.placeholder.com/48"} alt="" className="table-img" /></td>
+                      <td><strong>{p.name}</strong></td>
+                      <td>Rs.{p.price?.toLocaleString()}</td>
+                      <td>{p.originalPrice ? `Rs.${p.originalPrice?.toLocaleString()}` : "—"}</td>
+                      <td><span className={`stock-badge${p.stock <= 3 ? " low" : ""}`}>{p.stock}</span></td>
+                      <td>{p.category}</td>
+                      <td><span className="tag-pill">{p.tag}</span></td>
+                      <td>
+                        <button className="tbl-btn edit" onClick={() => setModal({ type: "product", data: p })}>Edit</button>
+                        <button className="tbl-btn del" onClick={async () => { await deleteDoc(doc(db, "products", p.id)); showToast("Product deleted"); }}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {products.length === 0 && <div className="empty-msg">No products yet. Click "+ Add Product" to start.</div>}
             </div>
-            {subtotal > 0 && subtotal < freeAbove && (
-              <div className="delivery-banner">
-                <div className="delivery-text">
-                  <span>Add Rs.{(freeAbove - subtotal).toLocaleString()} more for free delivery</span>
-                  <span className="free-label">FREE</span>
-                </div>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, (subtotal / freeAbove) * 100)}%` }} />
-                </div>
-              </div>
-            )}
-            {subtotal >= freeAbove && subtotal > 0 && <div className="free-banner">🎉 Free delivery unlocked!</div>}
-
-            <div className="product-grid">
-              {!loaded
-                ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} />)
-                : filtered.length === 0
-                  ? <div className="empty-state"><div>🔍</div><p>No products found</p></div>
-                  : filtered.map(p => {
-                      const inCart = cart.find(i => i.id === p.id);
-                      const wished = wishlist.includes(p.id);
-                      const disc   = p.originalPrice ? Math.round((1 - p.price / p.originalPrice) * 100) : null;
-                      return (
-                        <div key={p.id} className="card product-card">
-                          {disc && <span className="disc-badge">-{disc}%</span>}
-                          <button className="wish-btn" onClick={() => toggleWish(p)}>{wished ? "❤️" : "🤍"}</button>
-                          <div className="product-img">
-                            {p.image
-                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                              : <span style={{ fontSize: 50 }}>{p.emoji || "🛍️"}</span>}
-                          </div>
-                          <div className="product-body">
-                            <p className="product-name">{p.name}</p>
-                            <div className="price-row">
-                              <span className="price">Rs.{p.price?.toLocaleString()}</span>
-                              {p.originalPrice && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
-                            </div>
-                            {p.stock <= 3 && p.stock > 0 && <p className="low-stock">Only {p.stock} left!</p>}
-                            {p.stock === 0 && <p className="low-stock">Out of stock</p>}
-                            <button className={`add-btn${inCart ? " in-cart" : ""}${p.stock === 0 ? " disabled" : ""}`}
-                              onClick={() => p.stock > 0 && addToCart(p)} disabled={p.stock === 0}>
-                              {p.stock === 0 ? "Out of Stock" : inCart ? `✓ In Cart (${inCart.qty})` : "+ Add to Cart"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-              }
-            </div>
-            {itemCount > 0 && (
-              <div className="floater">
-                <span>{itemCount} items · Rs.{animTotal.toLocaleString()}</span>
-                <button className="wa-btn-sm" onClick={() => setTab(2)}>Order via WhatsApp →</button>
-              </div>
-            )}
           </div>
         )}
 
+        {/* ── COUPONS ── */}
         {tab === 1 && (
-          <div className="fade-in">
-            <h2 className="section-title">Your Cart</h2>
-            {cart.length === 0 ? (
-              <div className="empty-state">
-                <div style={{ fontSize: 48 }}>🛒</div>
-                <p>Cart is empty</p>
-                <button className="btn-dark" onClick={() => setTab(0)}>Browse Products</button>
-              </div>
-            ) : (
-              <>
-                {cart.map(item => (
-                  <div key={item.id} className="cart-item">
-                    <div className="cart-emoji">
-                      {item.image
-                        ? <img src={item.image} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10 }} />
-                        : item.emoji}
-                    </div>
-                    <div className="cart-info">
-                      <p className="cart-name">{item.name}</p>
-                      <p className="cart-price">Rs.{item.price?.toLocaleString()} each</p>
-                    </div>
-                    <div className="qty-ctrl">
-                      <button className="qty-btn" onClick={() => changeQty(item.id, -1)}>−</button>
-                      <span className="qty-num">{item.qty}</span>
-                      <button className="qty-btn" onClick={() => changeQty(item.id, 1)}>+</button>
-                    </div>
-                    <div className="cart-total">
-                      <p>Rs.{(item.price * item.qty).toLocaleString()}</p>
-                      <button className="remove-btn" onClick={() => removeFromCart(item.id)}>Remove</button>
-                    </div>
-                  </div>
-                ))}
-                <div className="promo-row">
-                  <input className="promo-input" placeholder="Enter coupon code…" value={promoInput} onChange={e => setPromoInput(e.target.value.toUpperCase())} />
-                  <button className="btn-dark sm" onClick={applyPromo}>Apply</button>
-                </div>
-                {promoMsg && <p className={`promo-msg${promoMsg.ok ? " ok" : ""}`}>{promoMsg.text}</p>}
-                <div className="surface summary">
-                  <div className="sum-row"><span>Subtotal ({itemCount} items)</span><span>Rs.{subtotal.toLocaleString()}</span></div>
-                  {appliedPromo && <div className="sum-row green"><span>Discount ({appliedPromo.code})</span><span>-Rs.{discount.toLocaleString()}</span></div>}
-                  <div className="sum-row green"><span>Delivery</span><span>{delivery === 0 ? "FREE 🎉" : `Rs.${delivery}`}</span></div>
-                  <div className="sum-row total"><span>Total</span><span>Rs.{animTotal.toLocaleString()}</span></div>
-                </div>
-                <button className="btn-dark full" onClick={() => setTab(2)}>Proceed to Checkout →</button>
-              </>
-            )}
+          <div>
+            <div className="page-header">
+              <h2>Coupons <span className="count">{coupons.length}</span></h2>
+              <button className="btn-primary" onClick={() => setModal({ type: "coupon", data: null })}>+ Add Coupon</button>
+            </div>
+            <div className="product-table-wrap">
+              <table className="admin-table">
+                <thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Min Order</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {coupons.map(c => (
+                    <tr key={c.id}>
+                      <td><strong style={{ fontFamily: "monospace", fontSize: 15 }}>{c.code}</strong></td>
+                      <td>{c.type === "percent" ? "Percentage" : "Flat"}</td>
+                      <td>{c.type === "percent" ? `${c.value}%` : `Rs.${c.value}`}</td>
+                      <td>{c.minOrder ? `Rs.${c.minOrder}` : "None"}</td>
+                      <td><span className={`status-pill${c.active ? " active" : " inactive"}`}>{c.active ? "Active" : "Inactive"}</span></td>
+                      <td>
+                        <button className="tbl-btn edit" onClick={() => setModal({ type: "coupon", data: c })}>Edit</button>
+                        <button className="tbl-btn del" onClick={async () => { await deleteDoc(doc(db, "coupons", c.id)); showToast("Coupon deleted"); }}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {coupons.length === 0 && <div className="empty-msg">No coupons yet. Click "+ Add Coupon" to start.</div>}
+            </div>
           </div>
         )}
 
+        {/* ── ORDERS ── */}
         {tab === 2 && (
-          <div className="fade-in">
-            {sent ? (
-              <div className="success-screen">
-                <div className="success-check">✓</div>
-                <h2>Order Placed!</h2>
-                <p>Tap below to open WhatsApp and confirm your order.</p>
-                <a className="wa-link" href={waUrl} target="_blank" rel="noreferrer">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.975-1.302A9.956 9.956 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.945 7.945 0 01-4.27-1.24l-.306-.183-3.046.798.813-2.968-.2-.314A7.945 7.945 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/></svg>
-                  Open WhatsApp &amp; Send Order
-                </a>
-                <button className="btn-dark" onClick={resetApp}>Shop Again</button>
-              </div>
-            ) : (
-              <>
-                <h2 className="section-title">Customer Details</h2>
-                {[
-                  { label: "Full Name", key: "name", type: "text", ph: "e.g. Rahul Sharma" },
-                  { label: "Phone Number", key: "phone", type: "tel", ph: "10-digit mobile" },
-                ].map(({ label, key, type, ph }) => (
-                  <div key={key} className="field">
-                    <label>{label}</label>
-                    <input type={type} placeholder={ph} value={form[key]}
-                      className={errors[key] ? "err" : ""}
-                      onChange={e => { setForm({ ...form, [key]: e.target.value }); setErrors({ ...errors, [key]: "" }); }} />
-                    {errors[key] && <span className="field-err">{errors[key]}</span>}
+          <div>
+            <div className="page-header">
+              <h2>Orders <span className="count">{orders.length}</span></h2>
+            </div>
+            {orders.length === 0 && <div className="empty-msg">No orders yet. Orders appear here when customers place them.</div>}
+            {orders.map(o => (
+              <div key={o.id} className="order-card">
+                <div className="order-header">
+                  <div>
+                    <p className="order-name">{o.customerName}</p>
+                    <p className="order-meta">📞 {o.phone} · 📍 {o.address}</p>
                   </div>
-                ))}
-                <div className="field">
-                  <label>Delivery Address</label>
-                  <textarea rows={3} placeholder="House no., Street, City, PIN…"
-                    className={errors.address ? "err" : ""}
-                    value={form.address}
-                    onChange={e => { setForm({ ...form, address: e.target.value }); setErrors({ ...errors, address: "" }); }} />
-                  {errors.address && <span className="field-err">{errors.address}</span>}
+                  <div style={{ textAlign: "right" }}>
+                    <p className="order-total">Rs.{o.total?.toLocaleString()}</p>
+                    <p className="order-date">{o.createdAt?.toDate?.()?.toLocaleDateString("en-IN") || "—"}</p>
+                  </div>
                 </div>
-                {cart.length > 0 && (
-                  <div className="surface summary" style={{ marginBottom: 20 }}>
-                    <p className="sum-heading">Order Summary</p>
-                    {cart.map(i => (
-                      <div key={i.id} className="sum-row sm">
-                        <span>{i.emoji} {i.name} ×{i.qty}</span>
-                        <span>Rs.{(i.price * i.qty).toLocaleString()}</span>
-                      </div>
-                    ))}
-                    {appliedPromo && <div className="sum-row green sm"><span>Discount</span><span>-Rs.{discount.toLocaleString()}</span></div>}
-                    <div className="sum-row green sm"><span>Delivery</span><span>{delivery === 0 ? "FREE" : `Rs.${delivery}`}</span></div>
-                    <div className="sum-row total"><span>Total</span><span>Rs.{total.toLocaleString()}</span></div>
-                  </div>
-                )}
-                {cart.length === 0 && (
-                  <div className="warn-box">Cart is empty. <button className="link-btn" onClick={() => setTab(0)}>Add items</button></div>
-                )}
-                <button className={`wa-place-btn${!cart.length ? " disabled" : ""}`} onClick={placeOrder} disabled={!cart.length}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.975-1.302A9.956 9.956 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a7.945 7.945 0 01-4.27-1.24l-.306-.183-3.046.798.813-2.968-.2-.314A7.945 7.945 0 014 12c0-4.418 3.582-8 8-8s8 3.582 8 8-3.582 8-8 8z"/></svg>
-                  Place Order on WhatsApp
-                </button>
-                <p className="wa-hint">You'll be redirected to WhatsApp to confirm</p>
-              </>
-            )}
+                <div className="order-items">
+                  {o.items?.map((item, i) => (
+                    <span key={i} className="order-item-pill">{item.emoji} {item.name} ×{item.qty}</span>
+                  ))}
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                  <select className="status-select" value={o.status || "pending"}
+                    onChange={async e => { await updateDoc(doc(db, "orders", o.id), { status: e.target.value }); showToast("Status updated"); }}>
+                    <option value="pending">⏳ Pending</option>
+                    <option value="confirmed">✅ Confirmed</option>
+                    <option value="shipped">🚚 Shipped</option>
+                    <option value="delivered">📦 Delivered</option>
+                    <option value="cancelled">❌ Cancelled</option>
+                  </select>
+                  <button className="tbl-btn del" onClick={async () => { await deleteDoc(doc(db, "orders", o.id)); showToast("Order deleted"); }}>Delete</button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
+
+        {/* ── SETTINGS ── */}
+        {tab === 3 && (
+          <div>
+            <div className="page-header"><h2>Store Settings</h2></div>
+            <div className="settings-card">
+              {[
+                { label: "Store Name",           key: "storeName",         ph: "e.g. My Fashion Store" },
+                { label: "WhatsApp Number",       key: "whatsapp",          ph: "e.g. 919899563148" },
+                { label: "Delivery Fee (Rs.)",    key: "deliveryFee",       ph: "e.g. 49" },
+                { label: "Free Delivery Above (Rs.)", key: "freeDeliveryAbove", ph: "e.g. 999" },
+              ].map(({ label, key, ph }) => (
+                <div key={key} className="field">
+                  <label>{label}</label>
+                  <input placeholder={ph} value={settings[key] || ""}
+                    onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
+                </div>
+              ))}
+              <button className="btn-primary" onClick={saveSettings}>💾 Save Settings</button>
+            </div>
+          </div>
+        )}
+
       </main>
+    </div>
+  );
+}
+
+/* ── MODAL ── */
+function Modal({ modal, setModal, showToast }) {
+  const isProduct = modal.type === "product";
+  const editing   = !!modal.data;
+
+  const [form, setForm] = useState(modal.data || (isProduct ? {
+    name: "", price: "", originalPrice: "", stock: "", category: "Clothing",
+    tag: "New Arrival", emoji: "🛍️", image: "", imageUrl: "",
+  } : {
+    code: "", type: "percent", value: "", minOrder: "", active: true,
+  }));
+  const [uploading, setUploading] = useState(false);
+  const [customCat, setCustomCat] = useState(modal.data?.category && !["Clothing","Footwear","Electronics","Accessories","Bags"].includes(modal.data?.category));
+  const [imgPreview, setImgPreview] = useState(modal.data?.image || "");
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleImageFile = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      set("image", url); setImgPreview(url);
+      showToast("Image uploaded!");
+    } catch { showToast("Image upload failed", false); }
+    finally { setUploading(false); }
+  };
+
+  const handleImageUrl = e => {
+    set("imageUrl", e.target.value);
+    set("image", e.target.value);
+    setImgPreview(e.target.value);
+  };
+
+  const save = async () => {
+    if (isProduct) {
+      if (!form.name || !form.price) { showToast("Name and price required", false); return; }
+      const data = {
+        name: form.name, price: Number(form.price),
+        originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
+        stock: Number(form.stock) || 0, category: form.category,
+        tag: form.tag, emoji: form.emoji,
+        image: form.image || "",
+      };
+      if (editing) await updateDoc(doc(db, "products", form.id), data);
+      else await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
+      showToast(editing ? "Product updated!" : "Product added!");
+    } else {
+      if (!form.code || !form.value) { showToast("Code and value required", false); return; }
+      const data = {
+        code: form.code.toUpperCase(), type: form.type,
+        value: Number(form.value), minOrder: Number(form.minOrder) || 0,
+        active: form.active,
+      };
+      if (editing) await updateDoc(doc(db, "coupons", form.id), data);
+      else await addDoc(collection(db, "coupons"), { ...data, createdAt: serverTimestamp() });
+      showToast(editing ? "Coupon updated!" : "Coupon added!");
+    }
+    setModal(null);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModal(null); }}>
+      <div className="modal-box">
+        <div className="modal-header">
+          <h3>{editing ? "Edit" : "Add"} {isProduct ? "Product" : "Coupon"}</h3>
+          <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+        </div>
+
+        {isProduct ? (
+          <div className="modal-body">
+            {/* Image */}
+            <div className="field">
+              <label>Product Image</label>
+              <div className="img-upload-row">
+                {imgPreview && <img src={imgPreview} alt="" className="img-preview" />}
+                <div style={{ flex: 1 }}>
+                  <input type="file" accept="image/*" onChange={handleImageFile} className="file-input" />
+                  <p className="or-divider">— or paste URL —</p>
+                  <input placeholder="https://..." value={form.imageUrl || ""} onChange={handleImageUrl} />
+                </div>
+              </div>
+              {uploading && <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>⏳ Uploading...</p>}
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Emoji</label>
+                <input value={form.emoji} onChange={e => set("emoji", e.target.value)} style={{ fontSize: 22 }} />
+              </div>
+              <div className="field" style={{ flex: 3 }}>
+                <label>Product Name *</label>
+                <input placeholder="e.g. Classic T-Shirt" value={form.name} onChange={e => set("name", e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Price (Rs.) *</label>
+                <input type="number" placeholder="499" value={form.price} onChange={e => set("price", e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Original Price</label>
+                <input type="number" placeholder="699" value={form.originalPrice || ""} onChange={e => set("originalPrice", e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Stock</label>
+                <input type="number" placeholder="10" value={form.stock} onChange={e => set("stock", e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Category</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select value={customCat ? "__custom__" : form.category}
+                    onChange={e => { if (e.target.value === "__custom__") { setCustomCat(true); set("category", ""); } else { setCustomCat(false); set("category", e.target.value); } }}
+                    style={{ flex: 1 }}>
+                    {["Clothing","Footwear","Electronics","Accessories","Bags","__custom__"].map(c =>
+                      <option key={c} value={c}>{c === "__custom__" ? "＋ Add New..." : c}</option>
+                    )}
+                  </select>
+                  {customCat && (
+                    <input placeholder="e.g. Jewellery" value={form.category}
+                      onChange={e => set("category", e.target.value)} style={{ flex: 1 }} />
+                  )}
+                </div>
+              </div>
+              <div className="field">
+                <label>Tag</label>
+                <select value={form.tag} onChange={e => set("tag", e.target.value)}>
+                  {["New Arrival","Sale","Trending","Popular","Limited","Bestseller"].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="modal-body">
+            <div className="field">
+              <label>Coupon Code *</label>
+              <input placeholder="e.g. SAVE10" value={form.code} onChange={e => set("code", e.target.value.toUpperCase())}
+                style={{ fontFamily: "monospace", fontSize: 16, letterSpacing: 2 }} />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Discount Type</label>
+                <select value={form.type} onChange={e => set("type", e.target.value)}>
+                  <option value="percent">Percentage (%)</option>
+                  <option value="flat">Flat Amount (Rs.)</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Value *</label>
+                <input type="number" placeholder={form.type === "percent" ? "10" : "200"} value={form.value} onChange={e => set("value", e.target.value)} />
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Min Order (Rs.)</label>
+                <input type="number" placeholder="0" value={form.minOrder || ""} onChange={e => set("minOrder", e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select value={form.active ? "true" : "false"} onChange={e => set("active", e.target.value === "true")}>
+                  <option value="true">Active</option>
+                  <option value="false">Inactive</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+          <button className="btn-primary" onClick={save}>{editing ? "Save Changes" : "Add"}</button>
+        </div>
+      </div>
     </div>
   );
 }
