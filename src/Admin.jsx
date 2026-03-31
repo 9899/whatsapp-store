@@ -346,6 +346,7 @@ function Modal({ modal, setModal, showToast, categories }) {
   const [form, setForm] = useState(modal.data || (isProduct ? {
     name: "", price: "", originalPrice: "", stock: "", category: allCats[0] || "Clothing",
     tag: "New Arrival", emoji: "🛍️", image: "", imageUrl: "",
+    unit: "Pcs", unitLabel: "", sizeOptions: [],
   } : {
     code: "", type: "percent", value: "", minOrder: "", active: true,
   }));
@@ -389,8 +390,9 @@ function Modal({ modal, setModal, showToast, categories }) {
         originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
         stock: Number(form.stock) || 0, category: finalCat,
         tag: form.tag, emoji: form.emoji, image: form.image || "",
-        sizes: form.sizes ? form.sizes.split(",").map(s => s.trim()).filter(Boolean) : [],
+        unit: form.unit || "Pcs",
         unitLabel: form.unitLabel || "",
+        sizeOptions: (form.sizeOptions || []).filter(s => s.size.trim()),
       };
       if (editing) await updateDoc(doc(db, "products", form.id), data);
       else await addDoc(collection(db, "products"), { ...data, createdAt: serverTimestamp() });
@@ -430,6 +432,32 @@ function Modal({ modal, setModal, showToast, categories }) {
                 </div>
               </div>
               {uploading && <p style={{ fontSize: 12, color: "#888", marginTop: 4 }}>⏳ Uploading...</p>}
+            </div>
+            {/* Sizes with prices */}
+            <div className="field">
+              <label>Sizes & Prices <span style={{fontWeight:400,color:"#aaa"}}>(optional)</span></label>
+              {(form.sizeOptions || []).map((so, idx) => (
+                <div key={idx} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
+                  <input placeholder="Size (e.g. S, M, 500ml)" value={so.size}
+                    onChange={e => {
+                      const updated = [...(form.sizeOptions||[])];
+                      updated[idx] = {...updated[idx], size: e.target.value};
+                      set("sizeOptions", updated);
+                    }} style={{flex:2}}/>
+                  <input type="number" placeholder="Price (Rs.)" value={so.price}
+                    onChange={e => {
+                      const updated = [...(form.sizeOptions||[])];
+                      updated[idx] = {...updated[idx], price: e.target.value};
+                      set("sizeOptions", updated);
+                    }} style={{flex:1}}/>
+                  <button onClick={() => set("sizeOptions", (form.sizeOptions||[]).filter((_,i)=>i!==idx))}
+                    style={{background:"#fde8e8",border:"none",borderRadius:8,padding:"8px 12px",cursor:"pointer",color:"#e03030",fontWeight:700}}>×</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => set("sizeOptions", [...(form.sizeOptions||[]), {size:"", price:""}])}
+                style={{padding:"8px 16px",background:"#f0f0f0",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:600}}>
+                + Add Size
+              </button>
             </div>
             <div className="field-row">
               <div className="field" style={{ flex: 1 }}>

@@ -82,6 +82,8 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .size-btn { padding: 4px 10px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--input-bg); color: var(--tx2); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; font-family: inherit; }
 .size-btn.active { background: var(--tx1); color: var(--card); border-color: var(--tx1); }
 .cart-size { font-size: 12px; color: var(--tx2); font-weight: 400; }
+.size-select { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; color: var(--tx1); background: var(--input-bg); margin: 6px 0; cursor: pointer; outline: none; }
+.size-select:focus { border-color: var(--tx1); }
 
 /* ── floater ── */
 .floater { margin-top: 20px; padding: 14px 18px; background: var(--tx1); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; }
@@ -182,6 +184,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 /* ── scrollbar ── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-thumb { background: #aaa; border-radius: 4px; }
+
 
 /* ── Hero ── */
 .hero { padding: 24px 20px; }

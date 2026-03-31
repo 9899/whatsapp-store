@@ -73,7 +73,7 @@ export default function App() {
   const [dark, setDark]               = useState(false);
   const [products, setProducts]       = useState([]);
   const [coupons, setCoupons]         = useState([]);
-  const [settings, setSettings] = useState({
+  const [settings, setSettings]       = useState({
     storeName: "Order Store", whatsapp: "919899563148",
     deliveryFee: "49", freeDeliveryAbove: "999",
     logoUrl: "", tagline: "Fast delivery via WhatsApp",
@@ -97,6 +97,16 @@ export default function App() {
   const [confetti, setConfetti]       = useState(false);
   const [cartShake, setCartShake]     = useState(false);
   const [selectedSizes, setSelectedSizes] = useState({});
+  const tid = useRef(0);
+
+  const getEffectivePrice = (p) => {
+    const sel = selectedSizes[p.id];
+    if (p.sizeOptions?.length && sel) {
+      const opt = p.sizeOptions.find(s => s.size === sel);
+      return opt ? Number(opt.price) : p.price;
+    }
+    return p.price;
+  };
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, "products"), s => {
@@ -106,7 +116,7 @@ export default function App() {
     const u2 = onSnapshot(collection(db, "coupons"), s => {
       setCoupons(s.docs.map(d => ({ id: d.id, ...d.data() })).filter(c => c.active));
     });
-    getDoc(doc(db, "settings", "store")).then(d => { if (d.exists()) setSettings(d.data()); });
+    getDoc(doc(db, "settings", "store")).then(d => { if (d.exists()) setSettings(s => ({...s, ...d.data()})); });
     return () => { u1(); u2(); };
   }, []);
 
@@ -115,6 +125,7 @@ export default function App() {
   const freeAbove   = Number(settings.freeDeliveryAbove) || 999;
   const deliveryFee = Number(settings.deliveryFee) || 49;
   const waNumber    = settings.whatsapp || "919899563148";
+  const pc          = settings.primaryColor || "#25D366";
 
   const subtotal  = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const discount  = appliedPromo
@@ -135,16 +146,17 @@ export default function App() {
   }, []);
 
   const addToCart = p => {
-    const size = selectedSizes[p.id] || (p.sizes?.length ? null : "");
-    if (p.sizes?.length && !size) {
+    const size = selectedSizes[p.id] || null;
+    if (p.sizeOptions?.length && !size) {
       toast("Please select a size first", "error"); return;
     }
-    const cartId = p.sizes?.length ? `${p.id}_${size}` : p.id;
+    const effectivePrice = getEffectivePrice(p);
+    const cartId = size ? `${p.id}_${size}` : p.id;
     setCart(prev => {
       const ex = prev.find(i => i.cartId === cartId);
       return ex
         ? prev.map(i => i.cartId === cartId ? { ...i, qty: i.qty + 1 } : i)
-        : [...prev, { ...p, cartId, size: size || null, qty: 1 }];
+        : [...prev, { ...p, cartId, size, price: effectivePrice, qty: 1 }];
     });
     setCartShake(true); setTimeout(() => setCartShake(false), 500);
     toast(`${p.emoji} ${p.name}${size ? ` (${size})` : ""} added!`, "success");
@@ -199,7 +211,7 @@ export default function App() {
     if (!validate() || !cart.length) return;
     const orderData = {
       customerName: form.name, phone: form.phone, address: form.address,
-      items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, qty: i.qty, unit: i.unit || "" })),
+      items: cart.map(i => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, qty: i.qty, unit: i.unit || "", size: i.size || "" })),
       subtotal, discount, delivery, total,
       coupon: appliedPromo?.code || null,
       status: "pending",
@@ -207,7 +219,7 @@ export default function App() {
     };
     await addDoc(collection(db, "orders"), orderData);
     const sep = "─────────────────────";
-    const itemLines = cart.map(i => `  • ${i.emoji} ${i.name} x${i.qty}${i.unit ? " " + i.unit : ""}  =  Rs.${(i.price * i.qty).toLocaleString()}`).join("\n");
+    const itemLines = cart.map(i => `  • ${i.emoji} ${i.name}${i.size ? ` (${i.size})` : ""} x${i.qty}${i.unit ? " " + i.unit : ""}  =  Rs.${(i.price * i.qty).toLocaleString()}`).join("\n");
     const msg = [
       "🛒 *NEW ORDER*", sep, "*Items Ordered:*", itemLines,
       `💰 *Total: Rs.${total.toLocaleString()}*`,
@@ -234,14 +246,11 @@ export default function App() {
     p.name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const pc = settings.primaryColor || "#25D366";
-
   return (
     <div className={`app${dark ? " dark" : ""}`}>
       <Toast toasts={toasts} />
       <Confetti run={confetti} />
 
-      {/* ── HEADER ── */}
       <header className="header" style={{borderBottom:`3px solid ${pc}`}}>
         <div className="header-inner">
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -258,8 +267,7 @@ export default function App() {
           </div>
           <div className="header-actions">
             <button className="icon-btn" onClick={() => setDark(d => !d)}>{dark ? "☀️" : "🌙"}</button>
-            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)}
-              style={{background:pc}}>
+            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)} style={{background:pc}}>
               🛒 Cart {itemCount > 0 && <span className="badge">{itemCount}</span>}
             </button>
           </div>
@@ -267,7 +275,7 @@ export default function App() {
         <nav className="tab-bar">
           {["Shop", "Cart", "Checkout"].map((t, i) => (
             <button key={t} className={`tab${tab === i ? " active" : ""}`}
-              style={tab===i?{borderBottomColor:pc,color:pc}:{}}
+              style={tab===i ? {borderBottomColor:pc, color:pc} : {}}
               onClick={() => setTab(i)}>
               {t}{i === 1 && itemCount > 0 ? ` (${itemCount})` : ""}
             </button>
@@ -276,9 +284,8 @@ export default function App() {
       </header>
 
       <main className="main">
-        {/* ── HERO BANNER (shop tab only) ── */}
         {tab === 0 && (
-          <div className="hero" style={{background:`linear-gradient(135deg, ${pc}22 0%, ${pc}44 100%)`,borderBottom:`1px solid ${pc}33`}}>
+          <div className="hero" style={{background:`linear-gradient(135deg, ${pc}22 0%, ${pc}44 100%)`, borderBottom:`1px solid ${pc}33`}}>
             <div className="hero-inner">
               {settings.logoUrl && <img src={settings.logoUrl} alt="logo" className="hero-logo"/>}
               <div>
@@ -289,6 +296,7 @@ export default function App() {
             </div>
           </div>
         )}
+
         {tab === 0 && (
           <div className="fade-in">
             <div className="search-wrap">
@@ -297,7 +305,9 @@ export default function App() {
             </div>
             <div className="cat-bar">
               {categories.map(c => (
-                <button key={c} className={`cat-btn${cat === c ? " active" : ""}`} onClick={() => setCat(c)}>{c}</button>
+                <button key={c} className={`cat-btn${cat === c ? " active" : ""}`}
+                  style={cat===c ? {background:pc, borderColor:pc} : {}}
+                  onClick={() => setCat(c)}>{c}</button>
               ))}
             </div>
             {subtotal > 0 && subtotal < freeAbove && (
@@ -307,7 +317,7 @@ export default function App() {
                   <span className="free-label">FREE</span>
                 </div>
                 <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, (subtotal / freeAbove) * 100)}%` }} />
+                  <div className="progress-fill" style={{ width: `${Math.min(100, (subtotal / freeAbove) * 100)}%`, background: pc }} />
                 </div>
               </div>
             )}
@@ -318,46 +328,48 @@ export default function App() {
                 : filtered.length === 0
                   ? <div className="empty-state"><div>🔍</div><p>No products found</p></div>
                   : filtered.map(p => {
-                      const inCart = cart.find(i => i.id === p.id && (!p.sizes?.length || i.size === selectedSizes[p.id]));
+                      const selSize = selectedSizes[p.id];
+                      const cartId = selSize ? `${p.id}_${selSize}` : p.id;
+                      const inCart = cart.find(i => i.cartId === cartId);
                       const wished = wishlist.includes(p.id);
                       const disc   = p.originalPrice ? Math.round((1 - p.price / p.originalPrice) * 100) : null;
-                      const cartId = p.sizes?.length ? `${p.id}_${selectedSizes[p.id]}` : p.id;
                       return (
                         <div key={p.id} className="card product-card">
                           {disc && <span className="disc-badge">-{disc}%</span>}
                           <button className="wish-btn" onClick={() => toggleWish(p)}>{wished ? "❤️" : "🤍"}</button>
                           <div className="product-img">
                             {p.image
-                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              ? <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                               : <span style={{ fontSize: 50 }}>{p.emoji || "🛍️"}</span>}
                           </div>
                           <div className="product-body">
                             <p className="product-name">{p.name}</p>
                             <div className="price-row">
-                              <span className="price">Rs.{p.price?.toLocaleString()}</span>
+                              <span className="price" style={{color:pc}}>Rs.{getEffectivePrice(p)?.toLocaleString()}</span>
                               {p.unit && <span className="unit-label">/ {p.unit}</span>}
-                              {p.originalPrice && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
+                              {p.originalPrice && !selSize && <span className="orig-price">Rs.{p.originalPrice?.toLocaleString()}</span>}
                             </div>
                             {p.unitLabel && <p className="unit-sublabel">{p.unitLabel}</p>}
-                            {p.sizes?.length > 0 && (
-                              <div className="size-wrap">
-                                {p.sizes.map(s => (
-                                  <button key={s}
-                                    className={`size-btn${selectedSizes[p.id] === s ? " active" : ""}`}
-                                    onClick={() => setSelectedSizes(prev => ({ ...prev, [p.id]: s }))}>
-                                    {s}
-                                  </button>
+                            {p.sizeOptions?.length > 0 && (
+                              <select className="size-select"
+                                value={selSize || ""}
+                                onChange={e => setSelectedSizes(prev => ({ ...prev, [p.id]: e.target.value }))}>
+                                <option value="">-- Select Size --</option>
+                                {p.sizeOptions.map(so => (
+                                  <option key={so.size} value={so.size}>
+                                    {so.size} — Rs.{Number(so.price).toLocaleString()}
+                                  </option>
                                 ))}
-                              </div>
+                              </select>
                             )}
                             {inCart ? (
                               <div className="inline-qty">
-                                <button className="iq-btn" onClick={() => changeQty(inCart.cartId || inCart.id, -1)}>−</button>
+                                <button className="iq-btn" onClick={() => changeQty(inCart.cartId, -1)}>−</button>
                                 <span className="iq-num">{inCart.qty}</span>
-                                <button className="iq-btn" onClick={() => changeQty(inCart.cartId || inCart.id, 1)}>+</button>
+                                <button className="iq-btn" onClick={() => changeQty(inCart.cartId, 1)}>+</button>
                               </div>
                             ) : (
-                              <button className="add-btn" onClick={() => addToCart(p)}>+ Add to Cart</button>
+                              <button className="add-btn" style={{background:pc}} onClick={() => addToCart(p)}>+ Add to Cart</button>
                             )}
                           </div>
                         </div>
@@ -366,7 +378,7 @@ export default function App() {
               }
             </div>
             {itemCount > 0 && (
-              <div className="floater">
+              <div className="floater" style={{background:pc}}>
                 <span>{itemCount} items · Rs.{animTotal.toLocaleString()}</span>
                 <button className="wa-btn-sm" onClick={() => setTab(2)}>Order via WhatsApp →</button>
               </div>
@@ -428,7 +440,7 @@ export default function App() {
           <div className="fade-in">
             {sent ? (
               <div className="success-screen">
-                <div className="success-check">✓</div>
+                <div className="success-check" style={{background:pc}}>✓</div>
                 <h2>Order Placed!</h2>
                 <p>Tap below to open WhatsApp and confirm your order.</p>
                 <a className="wa-link" href={waUrl} target="_blank" rel="noreferrer">
@@ -464,8 +476,8 @@ export default function App() {
                   <div className="surface summary" style={{ marginBottom: 20 }}>
                     <p className="sum-heading">Order Summary</p>
                     {cart.map(i => (
-                      <div key={i.id} className="sum-row sm">
-                        <span>{i.emoji} {i.name} ×{i.qty}{i.unit ? ` ${i.unit}` : ""}</span>
+                      <div key={i.cartId || i.id} className="sum-row sm">
+                        <span>{i.emoji} {i.name}{i.size ? ` (${i.size})` : ""} ×{i.qty}{i.unit ? ` ${i.unit}` : ""}</span>
                         <span>Rs.{(i.price * i.qty).toLocaleString()}</span>
                       </div>
                     ))}
@@ -488,7 +500,6 @@ export default function App() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
       {(settings.phone||settings.email||settings.address||settings.hours||settings.mapsUrl) && (
         <footer className="footer" style={{borderTop:`3px solid ${pc}`}}>
           <div className="footer-inner">
