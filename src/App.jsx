@@ -285,14 +285,31 @@ export default function App() {
 
       <main className="main">
         {tab === 0 && (
-          <div className="hero" style={{background:`linear-gradient(135deg, ${pc}22 0%, ${pc}44 100%)`, borderBottom:`1px solid ${pc}33`}}>
+          <div className="hero" style={{background:`linear-gradient(135deg, ${pc} 0%, ${pc}dd 100%)`, borderBottom:`1px solid ${pc}33`}}>
             <div className="hero-inner">
               {settings.logoUrl && <img src={settings.logoUrl} alt="logo" className="hero-logo"/>}
               <div>
-                <h2 className="hero-title" style={{color:pc}}>{settings.storeName || "Order Store"}</h2>
+                <h2 className="hero-title">{settings.storeName || "Order Store"}</h2>
                 <p className="hero-sub">{settings.tagline || "Quality products, fast delivery"}</p>
-                {settings.phone && <a href={`tel:${settings.phone}`} className="hero-contact" style={{color:pc}}>📞 {settings.phone}</a>}
+                {settings.phone && <a href={`tel:${settings.phone}`} className="hero-contact">📞 {settings.phone}</a>}
+                <div className="hero-badges">
+                  <span className="hero-badge">🚚 Fast Delivery</span>
+                  <span className="hero-badge">✅ Quality Products</span>
+                  <span className="hero-badge">💬 WhatsApp Orders</span>
+                </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trust Bar */}
+        {tab === 0 && (
+          <div className="trust-bar">
+            <div className="trust-inner">
+              <div className="trust-item"><span>🚚</span><span>Fast Delivery</span></div>
+              <div className="trust-item"><span>💯</span><span>Quality Products</span></div>
+              <div className="trust-item"><span>🔒</span><span>Secure Orders</span></div>
+              <div className="trust-item"><span>📞</span><span>24/7 Support</span></div>
             </div>
           </div>
         )}
@@ -383,6 +400,25 @@ export default function App() {
                 <button className="wa-btn-sm" onClick={() => setTab(2)}>Order via WhatsApp →</button>
               </div>
             )}
+
+            {/* Why Choose Us */}
+            <div className="why-us">
+              <p className="why-us-title">Why Choose Us</p>
+              <div className="why-grid">
+                {[
+                  { icon: "🚚", label: "Fast Delivery", desc: "Same day delivery available" },
+                  { icon: "✅", label: "Quality Assured", desc: "100% genuine products" },
+                  { icon: "💬", label: "Easy Ordering", desc: "Order via WhatsApp instantly" },
+                  { icon: "↩️", label: "Easy Returns", desc: "Hassle-free return policy" },
+                ].map(w => (
+                  <div key={w.label} className="why-card">
+                    <div className="why-icon">{w.icon}</div>
+                    <div className="why-label">{w.label}</div>
+                    <div className="why-desc">{w.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
