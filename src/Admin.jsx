@@ -5,7 +5,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimest
 import { uploadImage } from "./cloudinary";
 import "./Admin.css";
 
-const TABS = ["Products", "Coupons", "Orders", "Settings"];
+const TABS = ["Products", "Coupons", "Orders", "Settings", "Subscribers"];
 const DEFAULT_CATS = ["Clothing", "Footwear", "Electronics", "Accessories", "Bags"];
 
 export default function Admin() {
@@ -20,6 +20,9 @@ export default function Admin() {
   const [newCatInput, setNewCatInput] = useState("");
   const [toast, setToast]           = useState(null);
   const [modal, setModal]           = useState(null);
+  const [uploadingShop, setUploadingShop]   = useState(false);
+  const [uploadingOwner, setUploadingOwner] = useState(false);
+  const [subscribers, setSubscribers] = useState([]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setLoading(false); });
@@ -31,13 +34,14 @@ export default function Admin() {
     const u1 = onSnapshot(collection(db, "products"), s => setProducts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const u2 = onSnapshot(collection(db, "coupons"),  s => setCoupons(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const u3 = onSnapshot(collection(db, "orders"),   s => setOrders(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds)));
+    const u4 = onSnapshot(collection(db, "subscribers"), s => setSubscribers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds)));
     getDoc(doc(db, "settings", "store")).then(d => {
       if (d.exists()) {
         setSettings(d.data());
         if (d.data().categories) setCategories(d.data().categories);
       }
     });
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u2(); u3(); u4(); };
   }, [user]);
 
   const showToast = (msg, ok = true) => {
@@ -51,6 +55,30 @@ export default function Admin() {
   };
 
   const logout = () => signOut(auth);
+
+  const handleShopImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingShop(true);
+    try {
+      const url = await uploadImage(file);
+      setSettings(s => ({ ...s, shopImageUrl: url }));
+      showToast("Shop image uploaded!");
+    } catch { showToast("Upload failed", false); }
+    finally { setUploadingShop(false); }
+  };
+
+  const handleOwnerImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingOwner(true);
+    try {
+      const url = await uploadImage(file);
+      setSettings(s => ({ ...s, ownerImageUrl: url }));
+      showToast("Owner image uploaded!");
+    } catch { showToast("Upload failed", false); }
+    finally { setUploadingOwner(false); }
+  };
 
   const saveSettings = async () => {
     await setDoc(doc(db, "settings", "store"), { ...settings, categories });
@@ -105,7 +133,7 @@ export default function Admin() {
         <nav>
           {TABS.map((t, i) => (
             <button key={t} className={`side-item${tab === i ? " active" : ""}`} onClick={() => setTab(i)}>
-              {["📦", "🏷️", "📋", "⚙️"][i]} {t}
+              {["📦", "🏷️", "📋", "⚙️", "📬"][i]} {t}
             </button>
           ))}
         </nav>
@@ -285,7 +313,127 @@ export default function Admin() {
                 </div>
               ))}
 
-              <button className="btn-primary" onClick={saveSettings}>💾 Save Settings</button>
+
+              <p style={{fontWeight:700,fontSize:15,marginBottom:16,marginTop:24}}>📧 Catalogue Email</p>
+              <div style={{background:"#f0f7ff",border:"1px solid #bbd6f5",borderRadius:8,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#1a4a8a",lineHeight:1.6}}>
+                <strong>Setup via EmailJS (free, sends directly to subscriber):</strong><br/><br/>
+                <strong>Step 1</strong> — Go to <a href="https://emailjs.com" target="_blank" rel="noreferrer" style={{color:"#1a4a8a",fontWeight:700}}>emailjs.com</a> → Sign up free<br/>
+                <strong>Step 2</strong> — Email Services → Add New Service → choose <strong>Gmail</strong> → connect your Gmail → copy the <strong>Service ID</strong><br/>
+                <strong>Step 3</strong> — Email Templates → Create New Template → set <strong>To Email</strong> field to <code style={{background:"#dbeafe",padding:"1px 4px",borderRadius:3}}>{"{{to_email}}"}</code> → add your message with <code style={{background:"#dbeafe",padding:"1px 4px",borderRadius:3}}>{"{{catalogue_url}}"}</code> and <code style={{background:"#dbeafe",padding:"1px 4px",borderRadius:3}}>{"{{store_name}}"}</code> → copy the <strong>Template ID</strong><br/>
+                <strong>Step 4</strong> — Account → General → copy your <strong>Public Key</strong><br/>
+                <strong>Step 5</strong> — Paste all three below and save
+              </div>
+              {[
+                { label: "EmailJS Service ID",  key: "emailjsServiceId",  ph: "service_xxxxxxx" },
+                { label: "EmailJS Template ID", key: "emailjsTemplateId", ph: "template_xxxxxxx" },
+                { label: "EmailJS Public Key",  key: "emailjsPublicKey",  ph: "xxxxxxxxxxxxxxxxxxxx" },
+                { label: "Catalogue PDF URL",   key: "catalogueUrl",      ph: "https://drive.google.com/... or any public PDF link" },
+              ].map(({ label, key, ph }) => (
+                <div key={key} className="field">
+                  <label>{label}</label>
+                  <input placeholder={ph} value={settings[key] || ""}
+                    onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
+                </div>
+              ))}
+
+              
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:24,marginBottom:16}}>
+                <p style={{fontWeight:700,fontSize:15,margin:0}}>👤 About Page</p>
+                <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",userSelect:"none"}}>
+                  <span style={{fontSize:13,color:settings.aboutEnabled?"#1a8a4a":"#888",fontWeight:600}}>
+                    {settings.aboutEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                  <div
+                    onClick={() => setSettings({...settings, aboutEnabled: !settings.aboutEnabled})}
+                    style={{
+                      width:44,height:24,borderRadius:12,
+                      background:settings.aboutEnabled?"#25D366":"#ddd",
+                      position:"relative",cursor:"pointer",transition:"background .25s"
+                    }}>
+                    <div style={{
+                      position:"absolute",top:3,
+                      left:settings.aboutEnabled?22:3,
+                      width:18,height:18,borderRadius:"50%",
+                      background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,.2)",
+                      transition:"left .25s"
+                    }}/>
+                  </div>
+                </label>
+              </div>
+
+              <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#166534",lineHeight:1.6}}>
+                💡 <strong>Image tips:</strong> Shop image works best at <strong>1200×600px or wider</strong>. Owner photo works best as a <strong>square (500×500px+)</strong>. Use a Google Drive or Imgur link — make sure sharing is set to "Anyone with link".
+              </div>
+
+              {/* Shop Image Upload */}
+              <div className="field">
+                <label>Shop Image</label>
+                <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+                  {settings.shopImageUrl
+                    ? <img src={settings.shopImageUrl} alt="shop" style={{width:120,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #e0e0e0",flexShrink:0}}/>
+                    : <div style={{width:120,height:80,borderRadius:8,background:"#f5f5f5",border:"1.5px dashed #ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>🏪</div>
+                  }
+                  <div style={{flex:1}}>
+                    <label style={{display:"inline-block",padding:"10px 18px",background:uploadingShop?"#aaa":"#111",color:"#fff",borderRadius:8,cursor:uploadingShop?"not-allowed":"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",transition:"background .2s"}}>
+                      {uploadingShop ? "⏳ Uploading..." : "📁 Choose Shop Photo"}
+                      <input type="file" accept="image/*" onChange={handleShopImageUpload} disabled={uploadingShop} style={{display:"none"}}/>
+                    </label>
+                    <p style={{fontSize:12,color:"#888",marginTop:8}}>Upload a photo of your shop exterior or interior</p>
+                    {settings.shopImageUrl && (
+                      <button onClick={() => setSettings(s => ({...s, shopImageUrl:""}))}
+                        style={{marginTop:6,background:"none",border:"none",color:"#e03030",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:0}}>
+                        ✕ Remove photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Owner Image Upload */}
+              <div className="field">
+                <label>Owner Photo</label>
+                <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+                  {settings.ownerImageUrl
+                    ? <img src={settings.ownerImageUrl} alt="owner" style={{width:80,height:80,objectFit:"cover",borderRadius:"50%",border:"1px solid #e0e0e0",flexShrink:0}}/>
+                    : <div style={{width:80,height:80,borderRadius:"50%",background:"#f5f5f5",border:"1.5px dashed #ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>👤</div>
+                  }
+                  <div style={{flex:1}}>
+                    <label style={{display:"inline-block",padding:"10px 18px",background:uploadingOwner?"#aaa":"#111",color:"#fff",borderRadius:8,cursor:uploadingOwner?"not-allowed":"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit",transition:"background .2s"}}>
+                      {uploadingOwner ? "⏳ Uploading..." : "📁 Choose Owner Photo"}
+                      <input type="file" accept="image/*" onChange={handleOwnerImageUpload} disabled={uploadingOwner} style={{display:"none"}}/>
+                    </label>
+                    <p style={{fontSize:12,color:"#888",marginTop:8}}>Upload a clear photo of the shop owner</p>
+                    {settings.ownerImageUrl && (
+                      <button onClick={() => setSettings(s => ({...s, ownerImageUrl:""}))}
+                        style={{marginTop:6,background:"none",border:"none",color:"#e03030",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:0}}>
+                        ✕ Remove photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Text fields */}
+              {[
+                { label: "Owner Name",   key: "ownerName",   ph: "e.g. Unnat Sharma" },
+                { label: "Owner Title",  key: "ownerTitle",  ph: "e.g. Founder & Owner" },
+                { label: "Founded Year", key: "foundedYear", ph: "e.g. 2018" },
+              ].map(({ label, key, ph }) => (
+                <div key={key} className="field">
+                  <label>{label}</label>
+                  <input placeholder={ph} value={settings[key] || ""}
+                    onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
+                </div>
+              ))}
+              <div className="field">
+                <label>Owner Story</label>
+                <textarea rows={5} placeholder="Tell your journey — how you started, your mission, what makes you different..."
+                  value={settings.ownerStory || ""}
+                  onChange={e => setSettings({ ...settings, ownerStory: e.target.value })}
+                  style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e0e0e0",borderRadius:8,fontSize:14,fontFamily:"inherit",outline:"none",resize:"vertical"}} />
+              </div>
+
+                            <button className="btn-primary" onClick={saveSettings}>💾 Save Settings</button>
             </div>
 
             {/* Category Manager */}
@@ -328,6 +476,38 @@ export default function Admin() {
               <p style={{ fontSize: 12, color: "#aaa", marginTop: 12 }}>
                 Click "Save Settings" above to persist category changes.
               </p>
+            </div>
+          </div>
+        )}
+
+
+        {/* ── SUBSCRIBERS ── */}
+        {tab === 4 && (
+          <div>
+            <div className="page-header">
+              <h2>Subscribers <span className="count">{subscribers.length}</span></h2>
+              <button className="btn-secondary" onClick={() => {
+                const csv = "Email,Date\n" + subscribers.map(s => `${s.email},${s.createdAt?.toDate?.()?.toLocaleDateString("en-IN") || ""}`).join("\n");
+                const a = document.createElement("a"); a.href = "data:text/csv," + encodeURIComponent(csv); a.download = "subscribers.csv"; a.click();
+              }}>⬇ Export CSV</button>
+            </div>
+            <div className="product-table-wrap">
+              <table className="admin-table">
+                <thead><tr><th>Email</th><th>Date Subscribed</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {subscribers.map(s => (
+                    <tr key={s.id}>
+                      <td><strong>{s.email}</strong></td>
+                      <td>{s.createdAt?.toDate?.()?.toLocaleDateString("en-IN", {day:"2-digit",month:"short",year:"numeric"}) || "—"}</td>
+                      <td><span className={`status-pill${s.sent ? " active" : " inactive"}`}>{s.sent ? "Email Sent" : "Pending"}</span></td>
+                      <td>
+                        <button className="tbl-btn del" onClick={async () => { await deleteDoc(doc(db, "subscribers", s.id)); showToast("Subscriber removed"); }}>Remove</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {subscribers.length === 0 && <div className="empty-msg">No subscribers yet. Share your store link to get signups.</div>}
             </div>
           </div>
         )}
