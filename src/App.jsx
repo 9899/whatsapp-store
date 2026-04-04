@@ -267,12 +267,10 @@ export default function App() {
       return;
     }
 
-    // Step 2 — Notify via Web3Forms (free, unlimited, no CORS, no backend)
-    // Web3Forms sends YOU (the admin) a notification with the subscriber email
-    // You can then manually send the catalogue, or set up auto-reply in Web3Forms dashboard
-    const { web3formsKey, catalogueUrl, storeName } = settings;
+    // Step 2 — Send via EmailJS
+    const { emailjsServiceId, emailjsTemplateId, emailjsPublicKey, catalogueUrl, storeName, tagline } = settings;
 
-    if (!web3formsKey || !catalogueUrl) {
+    if (!emailjsServiceId || !emailjsTemplateId || !emailjsPublicKey || !catalogueUrl) {
       toast("Subscribed! ✓", "success");
       setHeroEmail("");
       setHeroSubmitting(false);
@@ -280,49 +278,35 @@ export default function App() {
     }
 
     try {
-      const resp = await fetch("https://api.web3forms.com/submit", {
+      const resp = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          access_key: web3formsKey,
-          subject: `New Catalogue Request — ${storeName || "Your Store"}`,
-          from_name: storeName || "Your Store",
-          // Send catalogue link directly to subscriber via Web3Forms autoresponder
-          email: email,
-          replyto: email,
-          message: `New subscriber: ${email}
-
-Catalogue link: ${catalogueUrl}`,
-          catalogue_url: catalogueUrl,
-          subscriber_email: email,
-          store_name: storeName || "Our Store",
-          // Autoresponder fields — Web3Forms sends this back to the subscriber
-          "autorespond-subject": `Your ${storeName || "Store"} Catalogue 📦`,
-          "autorespond-message": `Hi!
-
-Thank you for your interest in ${storeName || "our store"}.
-
-Here is your catalogue: ${catalogueUrl}
-
-Feel free to reply if you have questions!
-
-Best regards,
-${storeName || "Our Store"}`,
+          service_id: emailjsServiceId,
+          template_id: emailjsTemplateId,
+          user_id: emailjsPublicKey,
+          template_params: {
+            to_email:      email,
+            store_name:    storeName || "Our Store",
+            catalogue_url: catalogueUrl,
+            tagline:       tagline || "",
+          },
         }),
       });
 
-      const data = await resp.json();
+      const text = await resp.text();
+      console.log("EmailJS response:", resp.status, text);
 
-      if (data.success) {
+      if (resp.status === 200) {
         await updateDoc(doc(db, "subscribers", ref.id), { sent: true, sentAt: serverTimestamp() });
         toast("Catalogue sent to your inbox! 📬", "success");
       } else {
-        console.error("Web3Forms error:", data);
-        toast("Subscribed! ✓", "success");
+        console.error("EmailJS error:", resp.status, text);
+        toast(`Subscribed! Mail error: ${text}`, "info");
       }
     } catch (err) {
-      console.error("Web3Forms error:", err.message);
-      toast("Subscribed! ✓", "success");
+      console.error("EmailJS error:", err.message);
+      toast(`Subscribed! Error: ${err.message}`, "info");
     }
 
     setHeroEmail("");
