@@ -120,6 +120,11 @@ export default function App() {
     return () => { u1(); u2(); u3(); };
   }, []);
 
+  // Set light theme permanently
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", "light");
+  }, []);
+
   useEffect(() => {
     const pc = settings.primaryColor || "#3ecf8e";
     const root = document.documentElement;
