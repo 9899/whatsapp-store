@@ -251,31 +251,37 @@ export default function App() {
       <Toast toasts={toasts} />
       <Confetti run={confetti} />
 
-      <header className="header" style={{borderBottom:`3px solid ${pc}`}}>
+      <header className="header">
+        <div className="header-topbar">
+          {settings.phone && <div className="header-topbar-item"><span>📞</span><span>{settings.phone}</span></div>}
+          {settings.email && <div className="header-topbar-item"><span>✉️</span><span>{settings.email}</span></div>}
+          {settings.hours && <div className="header-topbar-item"><span>🕐</span><span>{settings.hours}</span></div>}
+          {!settings.phone && !settings.email && <div className="header-topbar-item"><span>🚚</span><span>Free delivery above Rs.{settings.freeDeliveryAbove||999}</span></div>}
+        </div>
         <div className="header-inner">
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div className="logo-wrap">
             {settings.logoUrl
-              ? <img src={settings.logoUrl} alt="logo" style={{height:44,objectFit:"contain",borderRadius:8}}/>
-              : <div style={{width:44,height:44,borderRadius:10,background:pc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff",fontWeight:700}}>
+              ? <img src={settings.logoUrl} alt="logo" style={{height:44,objectFit:"contain",borderRadius:6}}/>
+              : <div style={{width:44,height:44,borderRadius:6,background:pc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,color:"#1a1a1a",fontWeight:900}}>
                   {(settings.storeName||"O")[0]}
                 </div>
             }
             <div>
-              <h1 className="logo" style={{color:pc}}>{settings.storeName || "Order Store"}</h1>
-              <p className="tagline">{settings.tagline || "Fast delivery via WhatsApp"}</p>
+              <h1 className="logo">{(settings.storeName||"Order Store").split(" ")[0]}<span style={{color:pc}}>{(settings.storeName||"").split(" ").slice(1).join(" ") ? " "+(settings.storeName||"").split(" ").slice(1).join(" ") : ""}</span></h1>
+              <p className="tagline">{settings.tagline || "Industrial & Hardware Store"}</p>
             </div>
           </div>
           <div className="header-actions">
             <button className="icon-btn" onClick={() => setDark(d => !d)}>{dark ? "☀️" : "🌙"}</button>
-            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)} style={{background:pc}}>
-              🛒 Cart {itemCount > 0 && <span className="badge">{itemCount}</span>}
+            <button className={`cart-btn${cartShake ? " shake" : ""}`} onClick={() => setTab(1)} style={{background:pc,color:"#1a1a1a"}}>
+              🛒 Cart {itemCount > 0 && <span className="badge" style={{background:"#1a1a1a",color:pc}}>{itemCount}</span>}
             </button>
           </div>
         </div>
         <nav className="tab-bar">
           {["Shop", "Cart", "Checkout"].map((t, i) => (
             <button key={t} className={`tab${tab === i ? " active" : ""}`}
-              style={tab===i ? {borderBottomColor:pc, color:pc} : {}}
+              style={tab===i ? {color:pc, borderBottomColor:pc} : {}}
               onClick={() => setTab(i)}>
               {t}{i === 1 && itemCount > 0 ? ` (${itemCount})` : ""}
             </button>
@@ -302,7 +308,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Trust Bar */}
         {tab === 0 && (
           <div className="trust-bar">
             <div className="trust-inner">
@@ -401,7 +406,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Why Choose Us */}
             <div className="why-us">
               <p className="why-us-title">Why Choose Us</p>
               <div className="why-grid">
@@ -541,10 +545,11 @@ export default function App() {
           <div className="footer-inner">
             <div className="footer-brand">
               {settings.logoUrl
-                ? <img src={settings.logoUrl} alt="logo" style={{height:40,objectFit:"contain",marginBottom:8}}/>
-                : <div style={{fontSize:28,fontWeight:700,color:pc,marginBottom:4}}>{settings.storeName}</div>
+                ? <img src={settings.logoUrl} alt="logo" style={{height:40,objectFit:"contain",marginBottom:12,filter:"brightness(1.2)"}}/>
+                : <div className="footer-brand-name">{(settings.storeName||"Order").split(" ")[0]}<span>{(settings.storeName||"").split(" ").slice(1).join(" ") ? " "+(settings.storeName||"").split(" ").slice(1).join(" ") : ""}</span></div>
               }
-              <p style={{fontSize:13,color:"var(--tx2)",maxWidth:220}}>{settings.tagline}</p>
+              <p style={{fontSize:12,color:"rgba(133, 0, 0, 0.4)",maxWidth:200,lineHeight:1.6}}>{settings.tagline}</p>
+              
             </div>
             <div className="footer-contact">
               <p className="footer-heading">Contact Us</p>
